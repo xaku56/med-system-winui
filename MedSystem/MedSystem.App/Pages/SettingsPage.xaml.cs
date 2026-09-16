@@ -66,7 +66,7 @@ namespace MedSystem.App.Pages
                     "Настройки сохранены",
                     retentionDays == 0
                         ? "Автоматическая очистка корзины отключена."
-                        : $"Записи будут храниться в корзине {retentionDays} дней.");
+                        : $"Записи будут храниться в корзине {retentionDays} дн.");
             }
             catch (Exception ex)
             {

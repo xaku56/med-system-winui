@@ -31,11 +31,11 @@
                 <TextBlock Text="Удалённые записи можно восстановить до автоматической очистки."
                            TextWrapping="Wrap" Opacity="0.7" />
                 <StackPanel Orientation="Horizontal" Spacing="10">
-                    <NumberBox x:Name="TrashRetentionBox" Header="Хранить, дней"
+                    <NumberBox x:Name="TrashRetentionBox" Header="Хранить, дн."
                                Width="150" Minimum="1" Maximum="365"
                                SpinButtonPlacementMode="Inline" />
                     <CheckBox x:Name="NeverDeleteTrashCheckBox" Content="Не удалять автоматически"
-                              VerticalAlignment="Bottom" Margin="0,0,0,7"
+                              VerticalAlignment="Bottom"
                               Checked="NeverDeleteTrashCheckBox_Changed"
                               Unchecked="NeverDeleteTrashCheckBox_Changed" />
                 </StackPanel>
