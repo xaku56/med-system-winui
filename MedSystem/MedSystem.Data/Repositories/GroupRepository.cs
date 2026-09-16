@@ -13,7 +13,7 @@ public static class GroupRepository
         using var conn = Db.Open();
         using var cmd = conn.CreateCommand();
         cmd.CommandText = $"""
-            SELECT id, name FROM groups
+            SELECT id, name, archive_reason FROM groups
             WHERE deleted_at IS NULL
               AND archived_at IS {(archived ? "NOT NULL" : "NULL")}
             ORDER BY name
@@ -21,7 +21,12 @@ public static class GroupRepository
         using var reader = cmd.ExecuteReader();
         var result = new List<Group>();
         while (reader.Read())
-            result.Add(new Group { Id = reader.GetInt64(0), Name = reader.GetString(1) });
+            result.Add(new Group
+            {
+                Id = reader.GetInt64(0),
+                Name = reader.GetString(1),
+                ArchiveReason = reader.IsDBNull(2) ? "" : reader.GetString(2),
+            });
         return result;
     }
 
@@ -29,12 +34,17 @@ public static class GroupRepository
     {
         using var conn = Db.Open();
         using var cmd = conn.CreateCommand();
-        cmd.CommandText = "SELECT id, name FROM groups WHERE id = $id AND deleted_at IS NULL";
+        cmd.CommandText = "SELECT id, name, archive_reason FROM groups WHERE id = $id AND deleted_at IS NULL";
         cmd.Parameters.AddWithValue("$id", id);
         using var reader = cmd.ExecuteReader();
         if (!reader.Read())
             return null;
-        return new Group { Id = reader.GetInt64(0), Name = reader.GetString(1) };
+        return new Group
+        {
+            Id = reader.GetInt64(0),
+            Name = reader.GetString(1),
+            ArchiveReason = reader.IsDBNull(2) ? "" : reader.GetString(2),
+        };
     }
 
     /// <summary>Группы со счётчиком студентов одним запросом (без N+1).</summary>
@@ -44,19 +54,24 @@ public static class GroupRepository
         using var cmd = conn.CreateCommand();
         var lifecycleCondition = archived ? "IS NOT NULL" : "IS NULL";
         cmd.CommandText = $"""
-            SELECT g.id, g.name, COUNT(s.id)
+            SELECT g.id, g.name, g.archive_reason, COUNT(s.id)
             FROM groups g
             LEFT JOIN students s ON s.group_id = g.id
                 AND s.deleted_at IS NULL
                 AND s.archived_at {lifecycleCondition}
             WHERE g.deleted_at IS NULL AND g.archived_at {lifecycleCondition}
-            GROUP BY g.id, g.name
+            GROUP BY g.id, g.name, g.archive_reason
             ORDER BY g.name
             """;
         using var reader = cmd.ExecuteReader();
         var result = new List<(Group, long)>();
         while (reader.Read())
-            result.Add((new Group { Id = reader.GetInt64(0), Name = reader.GetString(1) }, reader.GetInt64(2)));
+            result.Add((new Group
+            {
+                Id = reader.GetInt64(0),
+                Name = reader.GetString(1),
+                ArchiveReason = reader.IsDBNull(2) ? "" : reader.GetString(2),
+            }, reader.GetInt64(3)));
         return result;
     }
 

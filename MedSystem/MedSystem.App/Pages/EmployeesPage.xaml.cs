@@ -17,6 +17,7 @@ namespace MedSystem.App.Pages
         public long Id { get; set; }
         public string FullName { get; set; } = "";
         public string Affiliation { get; set; } = "";
+        public string ArchiveReason { get; set; } = "";
         public string Sanminimum { get; set; } = "";
         public string MedicalExam { get; set; } = "";
         public string Fluorography { get; set; } = "";
@@ -71,6 +72,9 @@ namespace MedSystem.App.Pages
                     Id = emp.Id,
                     FullName = emp.FullName,
                     Affiliation = emp.Affiliation == "внешний" ? "внешний совместитель" : emp.Affiliation,
+                    ArchiveReason = string.IsNullOrWhiteSpace(emp.ArchiveReason)
+                        ? "Причина не указана"
+                        : $"Причина: {emp.ArchiveReason}",
                     Sanminimum = emp.SanminimumDate,
                     MedicalExam = emp.MedicalExamDate,
                     Fluorography = emp.FluorographyDate,

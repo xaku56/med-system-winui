@@ -24,6 +24,7 @@ namespace MedSystem.App.Pages
         public long GroupId { get; set; }
         public string FullName { get; set; } = "";
         public string GroupName { get; set; } = "";
+        public string ArchiveReason { get; set; } = "";
         public string Sanminimum { get; set; } = "";
         public string MedicalExam { get; set; } = "";
         public string Fluorography { get; set; } = "";
@@ -104,6 +105,9 @@ namespace MedSystem.App.Pages
                     GroupId = s.GroupId,
                     FullName = s.FullName,
                     GroupName = s.GroupName,
+                    ArchiveReason = string.IsNullOrWhiteSpace(s.ArchiveReason)
+                        ? "Причина не указана"
+                        : $"Причина: {s.ArchiveReason}",
                     Sanminimum = s.SanminimumDate,
                     MedicalExam = s.MedicalExamDate,
                     Fluorography = s.FluorographyDate,

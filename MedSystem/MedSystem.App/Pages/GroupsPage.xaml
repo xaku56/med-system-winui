@@ -18,7 +18,7 @@
         <Grid Grid.Row="0">
             <TextBlock Text="Учебные группы" Style="{StaticResource TitleTextBlockStyle}" />
             <StackPanel Orientation="Horizontal" Spacing="12" HorizontalAlignment="Right">
-                <ComboBox x:Name="ArchiveFilterBox" MinWidth="130" SelectedIndex="0"
+                <ComboBox x:Name="ArchiveFilterBox" MinWidth="130" SelectedIndex="0" Margin="0,3,0,0"
                           SelectionChanged="ArchiveFilterBox_SelectionChanged">
                     <x:String>Активные</x:String>
                     <x:String>Архив</x:String>
@@ -76,7 +76,12 @@
                             <ColumnDefinition Width="120" />
                             <ColumnDefinition Width="Auto" />
                         </Grid.ColumnDefinitions>
-                        <TextBlock Grid.Column="0" Text="{x:Bind Name}" VerticalAlignment="Center" />
+                        <StackPanel Grid.Column="0" VerticalAlignment="Center">
+                            <TextBlock Text="{x:Bind Name}" />
+                            <TextBlock Text="{x:Bind ArchiveReason}"
+                                       Visibility="{x:Bind ArchiveVisibility}"
+                                       FontSize="12" Opacity="0.6" />
+                        </StackPanel>
                         <TextBlock Grid.Column="1" Text="{x:Bind StudentCount}" Opacity="0.8"
                                    VerticalAlignment="Center" />
                         <Button Grid.Column="2" Content="Показать студентов" Tag="{x:Bind Id}"

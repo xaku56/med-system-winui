@@ -16,6 +16,7 @@ namespace MedSystem.App.Pages
         public long Id { get; set; }
         public string Name { get; set; } = "";
         public string StudentCount { get; set; } = "0";
+        public string ArchiveReason { get; set; } = "";
         public bool IsArchived { get; set; }
         public Visibility ActiveVisibility { get; set; }
         public Visibility ArchiveVisibility { get; set; }
@@ -49,6 +50,9 @@ namespace MedSystem.App.Pages
                     Id = group.Id,
                     Name = group.Name,
                     StudentCount = studentCount.ToString(),
+                    ArchiveReason = string.IsNullOrWhiteSpace(group.ArchiveReason)
+                        ? "Причина не указана"
+                        : $"Причина: {group.ArchiveReason}",
                     IsArchived = showArchived,
                     ActiveVisibility = showArchived ? Visibility.Collapsed : Visibility.Visible,
                     ArchiveVisibility = showArchived ? Visibility.Visible : Visibility.Collapsed,

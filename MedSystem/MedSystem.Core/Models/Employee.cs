@@ -20,6 +20,7 @@ public class Employee
     public string SanminimumDate { get; set; } = "";
     public string MedicalExamDate { get; set; } = "";
     public string FluorographyDate { get; set; } = "";
+    public string ArchiveReason { get; set; } = "";
 
     public string FullName => $"{LastName} {FirstName} {MiddleName}".Trim();
 }

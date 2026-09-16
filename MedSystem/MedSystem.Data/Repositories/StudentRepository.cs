@@ -20,7 +20,7 @@ public static class StudentRepository
             SELECT s.id, s.group_id, g.name, s.last_name, s.first_name, s.middle_name,
                    s.birth_date, s.oms, s.address,
                    s.sanminimum_date, s.medical_exam_date, s.fluorography_date,
-                   s.health_group
+                   s.health_group, s.archive_reason
             FROM students s
             LEFT JOIN groups g ON s.group_id = g.id
             WHERE s.deleted_at IS NULL
@@ -46,6 +46,7 @@ public static class StudentRepository
                 MedicalExamDate = reader.GetString(10),
                 FluorographyDate = reader.GetString(11),
                 HealthGroup = reader.GetString(12),
+                ArchiveReason = reader.IsDBNull(13) ? "" : reader.GetString(13),
             });
         }
         return result;
@@ -59,7 +60,7 @@ public static class StudentRepository
             SELECT s.id, s.group_id, g.name, s.last_name, s.first_name, s.middle_name,
                    s.birth_date, s.oms, s.address,
                    s.sanminimum_date, s.medical_exam_date, s.fluorography_date,
-                   s.health_group
+                   s.health_group, s.archive_reason
             FROM students s
             LEFT JOIN groups g ON s.group_id = g.id
             WHERE s.id = $id AND s.deleted_at IS NULL
@@ -83,6 +84,7 @@ public static class StudentRepository
             MedicalExamDate = reader.GetString(10),
             FluorographyDate = reader.GetString(11),
             HealthGroup = reader.GetString(12),
+            ArchiveReason = reader.IsDBNull(13) ? "" : reader.GetString(13),
         };
     }
 

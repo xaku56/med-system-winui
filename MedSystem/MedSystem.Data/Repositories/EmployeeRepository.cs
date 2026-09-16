@@ -8,7 +8,8 @@ public static class EmployeeRepository
         id, last_name, first_name, middle_name, birth_date, affiliation,
         passport_series, passport_number, passport_issued_by,
         passport_issue_date, passport_department_code,
-        oms, address, sanminimum_date, medical_exam_date, fluorography_date
+        oms, address, sanminimum_date, medical_exam_date, fluorography_date,
+        archive_reason
         """;
 
     public static long Count()
@@ -135,6 +136,7 @@ public static class EmployeeRepository
         SanminimumDate = r.GetString(13),
         MedicalExamDate = r.GetString(14),
         FluorographyDate = r.GetString(15),
+        ArchiveReason = r.IsDBNull(16) ? "" : r.GetString(16),
     };
 
     private static void AddParameters(Microsoft.Data.Sqlite.SqliteCommand cmd, Employee e)

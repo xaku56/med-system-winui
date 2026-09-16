@@ -108,7 +108,12 @@
                                     <ColumnDefinition Width="*" />
                                     <ColumnDefinition Width="*" />
                                 </Grid.ColumnDefinitions>
-                                <TextBlock Grid.Column="0" Text="{x:Bind FullName}" VerticalAlignment="Center" />
+                                <StackPanel Grid.Column="0" VerticalAlignment="Center">
+                                    <TextBlock Text="{x:Bind FullName}" />
+                                    <TextBlock Text="{x:Bind ArchiveReason}"
+                                               Visibility="{x:Bind RestoreVisibility}"
+                                               FontSize="12" Opacity="0.6" />
+                                </StackPanel>
                                 <TextBlock Grid.Column="1" Text="{x:Bind GroupName}" Opacity="0.8" VerticalAlignment="Center" />
                                 <Border Grid.Column="2" Background="{x:Bind SanminimumBg}" CornerRadius="4"
                                 Padding="10,2" HorizontalAlignment="Left" VerticalAlignment="Center">
