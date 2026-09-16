@@ -7,6 +7,8 @@ namespace MedSystem.Data;
 /// </summary>
 public static class DatabaseInitializer
 {
+    public const int CurrentSchemaVersion = 1;
+
     private const string EmployeesTableSql = """
         CREATE TABLE IF NOT EXISTS employees (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -24,7 +26,10 @@ public static class DatabaseInitializer
             address TEXT NOT NULL,
             sanminimum_date TEXT NOT NULL,
             medical_exam_date TEXT NOT NULL,
-            fluorography_date TEXT NOT NULL
+            fluorography_date TEXT NOT NULL,
+            archived_at TEXT,
+            archive_reason TEXT,
+            deleted_at TEXT
         )
         """;
 
@@ -42,6 +47,9 @@ public static class DatabaseInitializer
             medical_exam_date TEXT NOT NULL,
             fluorography_date TEXT NOT NULL,
             health_group TEXT NOT NULL DEFAULT '',
+            archived_at TEXT,
+            archive_reason TEXT,
+            deleted_at TEXT,
             FOREIGN KEY (group_id) REFERENCES groups(id) ON DELETE RESTRICT
         )
         """;
@@ -54,7 +62,10 @@ public static class DatabaseInitializer
         Execute(conn, """
             CREATE TABLE IF NOT EXISTS groups (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
-                name TEXT NOT NULL UNIQUE
+                name TEXT NOT NULL UNIQUE,
+                archived_at TEXT,
+                archive_reason TEXT,
+                deleted_at TEXT
             )
             """);
 
@@ -71,7 +82,8 @@ public static class DatabaseInitializer
                 name TEXT NOT NULL,
                 dosage TEXT NOT NULL,
                 quantity INTEGER NOT NULL,
-                expiration_date TEXT NOT NULL
+                expiration_date TEXT NOT NULL,
+                deleted_at TEXT
             )
             """);
 
@@ -86,7 +98,8 @@ public static class DatabaseInitializer
                 group_name TEXT NOT NULL,
                 complaints TEXT NOT NULL,
                 diagnosis TEXT NOT NULL,
-                actions_recommendations TEXT NOT NULL
+                actions_recommendations TEXT NOT NULL,
+                deleted_at TEXT
             )
             """);
 
@@ -107,6 +120,7 @@ public static class DatabaseInitializer
         Execute(conn, "CREATE INDEX IF NOT EXISTS idx_students_group_id ON students(group_id)");
         Execute(conn, "CREATE INDEX IF NOT EXISTS idx_appeals_number ON appeals(number)");
 
+        ApplyVersionedMigrations(conn);
         SeedIcdCodes(conn);
 
         tx.Commit();
@@ -119,8 +133,17 @@ public static class DatabaseInitializer
             Execute(conn, "ALTER TABLE employees RENAME TO employees_legacy");
             Execute(conn, EmployeesTableSql);
             Execute(conn, """
-                INSERT INTO employees
-                SELECT * FROM employees_legacy
+                INSERT INTO employees (
+                    id, last_name, first_name, middle_name, birth_date, affiliation,
+                    passport_series, passport_number, passport_issued_by,
+                    passport_issue_date, passport_department_code, oms, address,
+                    sanminimum_date, medical_exam_date, fluorography_date
+                )
+                SELECT id, last_name, first_name, middle_name, birth_date, affiliation,
+                       passport_series, passport_number, passport_issued_by,
+                       passport_issue_date, passport_department_code, oms, address,
+                       sanminimum_date, medical_exam_date, fluorography_date
+                FROM employees_legacy
                 """);
             Execute(conn, "DROP TABLE employees_legacy");
         }
@@ -141,6 +164,58 @@ public static class DatabaseInitializer
             Execute(conn, "DROP TABLE students_legacy");
         }
 
+    }
+
+    private static void ApplyVersionedMigrations(SqliteConnection conn)
+    {
+        var version = GetSchemaVersion(conn);
+        if (version > CurrentSchemaVersion)
+            throw new InvalidOperationException(
+                $"База данных создана более новой версией MedSystem (схема {version}).");
+
+        if (version < 1)
+        {
+            AddColumnIfMissing(conn, "groups", "archived_at", "TEXT");
+            AddColumnIfMissing(conn, "groups", "archive_reason", "TEXT");
+            AddColumnIfMissing(conn, "groups", "deleted_at", "TEXT");
+
+            AddColumnIfMissing(conn, "employees", "archived_at", "TEXT");
+            AddColumnIfMissing(conn, "employees", "archive_reason", "TEXT");
+            AddColumnIfMissing(conn, "employees", "deleted_at", "TEXT");
+
+            AddColumnIfMissing(conn, "students", "archived_at", "TEXT");
+            AddColumnIfMissing(conn, "students", "archive_reason", "TEXT");
+            AddColumnIfMissing(conn, "students", "deleted_at", "TEXT");
+
+            AddColumnIfMissing(conn, "medicines", "deleted_at", "TEXT");
+            AddColumnIfMissing(conn, "appeals", "deleted_at", "TEXT");
+
+            Execute(conn, "CREATE INDEX IF NOT EXISTS idx_groups_deleted_at ON groups(deleted_at)");
+            Execute(conn, "CREATE INDEX IF NOT EXISTS idx_employees_lifecycle_name ON employees(deleted_at, archived_at, last_name, first_name, middle_name, id)");
+            Execute(conn, "CREATE INDEX IF NOT EXISTS idx_students_lifecycle_name ON students(deleted_at, archived_at, last_name, first_name, middle_name, id)");
+            Execute(conn, "CREATE INDEX IF NOT EXISTS idx_students_lifecycle_group ON students(deleted_at, archived_at, group_id)");
+            Execute(conn, "CREATE INDEX IF NOT EXISTS idx_medicines_deleted_at ON medicines(deleted_at)");
+            Execute(conn, "CREATE INDEX IF NOT EXISTS idx_appeals_deleted_at ON appeals(deleted_at)");
+            Execute(conn, "INSERT OR IGNORE INTO system_info (key, value) VALUES ('trash_retention_days', '60')");
+            Execute(conn, "PRAGMA user_version = 1");
+        }
+    }
+
+    private static int GetSchemaVersion(SqliteConnection conn)
+    {
+        using var cmd = conn.CreateCommand();
+        cmd.CommandText = "PRAGMA user_version";
+        return Convert.ToInt32(cmd.ExecuteScalar());
+    }
+
+    private static void AddColumnIfMissing(
+        SqliteConnection conn,
+        string tableName,
+        string columnName,
+        string declaration)
+    {
+        if (!ColumnExists(conn, tableName, columnName))
+            Execute(conn, $"ALTER TABLE {tableName} ADD COLUMN {columnName} {declaration}");
     }
 
     private static bool ColumnIsRequired(SqliteConnection conn, string tableName, string columnName)
