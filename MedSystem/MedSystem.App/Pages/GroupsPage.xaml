@@ -18,8 +18,13 @@
         <Grid Grid.Row="0">
             <TextBlock Text="Учебные группы" Style="{StaticResource TitleTextBlockStyle}" />
             <StackPanel Orientation="Horizontal" Spacing="12" HorizontalAlignment="Right">
-                <Button Content="Перевести на следующий курс" Click="IncrementButton_Click" />
-                <Button Content="+ Добавить" Style="{StaticResource AccentButtonStyle}"
+                <ComboBox x:Name="ArchiveFilterBox" MinWidth="130" SelectedIndex="0"
+                          SelectionChanged="ArchiveFilterBox_SelectionChanged">
+                    <x:String>Активные</x:String>
+                    <x:String>Архив</x:String>
+                </ComboBox>
+                <Button x:Name="IncrementButton" Content="Перевести на следующий курс" Click="IncrementButton_Click" />
+                <Button x:Name="AddButton" Content="+ Добавить" Style="{StaticResource AccentButtonStyle}"
                         Click="AddButton_Click" />
             </StackPanel>
         </Grid>
@@ -53,8 +58,15 @@
                         <Grid.ContextFlyout>
                             <MenuFlyout>
                                 <MenuFlyoutItem Text="Переименовать"
+                                                Visibility="{x:Bind ActiveVisibility}"
                                                 Tag="{x:Bind Id}" Click="RenameMenuItem_Click" />
                                 <MenuFlyoutSeparator />
+                                <MenuFlyoutItem Text="Завершить обучение"
+                                                Visibility="{x:Bind ActiveVisibility}"
+                                                Tag="{x:Bind Id}" Click="ArchiveMenuItem_Click" />
+                                <MenuFlyoutItem Text="Восстановить из архива"
+                                                Visibility="{x:Bind ArchiveVisibility}"
+                                                Tag="{x:Bind Id}" Click="RestoreArchiveMenuItem_Click" />
                                 <MenuFlyoutItem Text="В корзину"
                                                 Tag="{x:Bind Id}" Click="DeleteMenuItem_Click" />
                             </MenuFlyout>

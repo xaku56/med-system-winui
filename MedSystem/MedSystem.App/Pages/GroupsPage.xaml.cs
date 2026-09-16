@@ -16,6 +16,9 @@ namespace MedSystem.App.Pages
         public long Id { get; set; }
         public string Name { get; set; } = "";
         public string StudentCount { get; set; } = "0";
+        public bool IsArchived { get; set; }
+        public Visibility ActiveVisibility { get; set; }
+        public Visibility ArchiveVisibility { get; set; }
     }
 
     /// <summary>Управление учебными группами.</summary>
@@ -37,16 +40,29 @@ namespace MedSystem.App.Pages
 
         private void LoadData()
         {
+            var showArchived = ArchiveFilterBox.SelectedIndex == 1;
             Rows.Clear();
-            foreach (var (group, studentCount) in GroupRepository.GetAllWithCounts())
+            foreach (var (group, studentCount) in GroupRepository.GetAllWithCounts(archived: showArchived))
             {
                 Rows.Add(new GroupRow
                 {
                     Id = group.Id,
                     Name = group.Name,
                     StudentCount = studentCount.ToString(),
+                    IsArchived = showArchived,
+                    ActiveVisibility = showArchived ? Visibility.Collapsed : Visibility.Visible,
+                    ArchiveVisibility = showArchived ? Visibility.Visible : Visibility.Collapsed,
                 });
             }
+
+            AddButton.IsEnabled = !showArchived;
+            IncrementButton.IsEnabled = !showArchived;
+        }
+
+        private void ArchiveFilterBox_SelectionChanged(object sender, SelectionChangedEventArgs e)
+        {
+            if (GroupsList != null)
+                LoadData();
         }
 
         // ── Добавление / переименование ──────────────────────────────
@@ -56,7 +72,7 @@ namespace MedSystem.App.Pages
 
         private void GroupsList_DoubleTapped(object sender, DoubleTappedRoutedEventArgs e)
         {
-            if (GroupsList.SelectedItem is GroupRow row)
+            if (GroupsList.SelectedItem is GroupRow { IsArchived: false } row)
                 _ = ShowNameDialogAsync(row);
         }
 
@@ -73,7 +89,11 @@ namespace MedSystem.App.Pages
         private void ShowStudentsButton_Click(object sender, RoutedEventArgs e)
         {
             if (sender is FrameworkElement { Tag: long groupId })
-                Frame.Navigate(typeof(StudentsPage), groupId);
+                Frame.Navigate(typeof(StudentsPage), new StudentsPageParameters
+                {
+                    GroupId = groupId,
+                    ShowArchived = ArchiveFilterBox.SelectedIndex == 1,
+                });
         }
 
         private async Task ShowNameDialogAsync(GroupRow? existing)
@@ -125,6 +145,57 @@ namespace MedSystem.App.Pages
 
         // ── Удаление ─────────────────────────────────────────────────
 
+        private async void ArchiveMenuItem_Click(object sender, RoutedEventArgs e)
+        {
+            if (sender is not FrameworkElement { Tag: long id })
+                return;
+
+            var row = Rows.FirstOrDefault(r => r.Id == id);
+            if (row == null)
+                return;
+
+            var dialog = new ContentDialog
+            {
+                Title = "Завершить обучение группы?",
+                Content = $"Группа «{row.Name}» и её активные студенты ({row.StudentCount}) будут перемещены в архив.",
+                PrimaryButtonText = "В архив",
+                CloseButtonText = "Отмена",
+                DefaultButton = ContentDialogButton.Close,
+                XamlRoot = XamlRoot,
+                RequestedTheme = ActualTheme,
+            };
+            if (await dialog.ShowAsync() != ContentDialogResult.Primary)
+                return;
+
+            try
+            {
+                var archivedStudents = GroupRepository.ArchiveWithStudents(id, "Выпуск");
+                await ShowMessageAsync("Группа архивирована", $"Студентов перемещено в архив: {archivedStudents}.");
+                LoadData();
+            }
+            catch (Exception ex)
+            {
+                await ShowMessageAsync("Ошибка", ex.Message);
+            }
+        }
+
+        private async void RestoreArchiveMenuItem_Click(object sender, RoutedEventArgs e)
+        {
+            if (sender is not FrameworkElement { Tag: long id })
+                return;
+
+            try
+            {
+                var restoredStudents = GroupRepository.RestoreFromArchive(id);
+                await ShowMessageAsync("Группа восстановлена", $"Студентов восстановлено: {restoredStudents}.");
+                LoadData();
+            }
+            catch (Exception ex)
+            {
+                await ShowMessageAsync("Ошибка", ex.Message);
+            }
+        }
+
         private async void DeleteMenuItem_Click(object sender, RoutedEventArgs e)
         {
             if (sender is not FrameworkElement { Tag: long id })
@@ -139,7 +210,7 @@ namespace MedSystem.App.Pages
             {
                 await ShowMessageAsync(
                     "Группа не пуста",
-                    $"В группе «{row.Name}» {count} студент(ов). Сначала переведите студентов или дождитесь функции архивирования групп.");
+                    $"В группе «{row.Name}» {count} студент(ов). Сначала восстановите или переместите их отдельно.");
                 return;
             }
 

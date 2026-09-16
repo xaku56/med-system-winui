@@ -8,11 +8,16 @@ public static class GroupRepository
     /// <summary>Дата перевода групп на следующий курс (месяц, день).</summary>
     public static (int Month, int Day) AcademicYearRollover { get; set; } = (8, 15);
 
-    public static List<Group> GetAll()
+    public static List<Group> GetAll(bool archived = false)
     {
         using var conn = Db.Open();
         using var cmd = conn.CreateCommand();
-        cmd.CommandText = "SELECT id, name FROM groups WHERE deleted_at IS NULL AND archived_at IS NULL ORDER BY name";
+        cmd.CommandText = $"""
+            SELECT id, name FROM groups
+            WHERE deleted_at IS NULL
+              AND archived_at IS {(archived ? "NOT NULL" : "NULL")}
+            ORDER BY name
+            """;
         using var reader = cmd.ExecuteReader();
         var result = new List<Group>();
         while (reader.Read())
@@ -33,15 +38,18 @@ public static class GroupRepository
     }
 
     /// <summary>Группы со счётчиком студентов одним запросом (без N+1).</summary>
-    public static List<(Group Group, long StudentCount)> GetAllWithCounts()
+    public static List<(Group Group, long StudentCount)> GetAllWithCounts(bool archived = false)
     {
         using var conn = Db.Open();
         using var cmd = conn.CreateCommand();
-        cmd.CommandText = """
+        var lifecycleCondition = archived ? "IS NOT NULL" : "IS NULL";
+        cmd.CommandText = $"""
             SELECT g.id, g.name, COUNT(s.id)
             FROM groups g
-            LEFT JOIN students s ON s.group_id = g.id AND s.deleted_at IS NULL
-            WHERE g.deleted_at IS NULL AND g.archived_at IS NULL
+            LEFT JOIN students s ON s.group_id = g.id
+                AND s.deleted_at IS NULL
+                AND s.archived_at {lifecycleCondition}
+            WHERE g.deleted_at IS NULL AND g.archived_at {lifecycleCondition}
             GROUP BY g.id, g.name
             ORDER BY g.name
             """;
@@ -81,6 +89,86 @@ public static class GroupRepository
     }
 
     public static void MoveToTrash(long id) => TrashRepository.MoveToTrash("group", id);
+
+    public static int ArchiveWithStudents(long id, string reason)
+    {
+        var archivedAt = DateTime.UtcNow.ToString("O");
+        using var conn = Db.Open();
+        using var tx = conn.BeginTransaction();
+
+        using (var group = conn.CreateCommand())
+        {
+            group.CommandText = """
+                UPDATE groups
+                SET archived_at = $archivedAt, archive_reason = $reason
+                WHERE id = $id AND deleted_at IS NULL AND archived_at IS NULL
+                """;
+            group.Parameters.AddWithValue("$archivedAt", archivedAt);
+            group.Parameters.AddWithValue("$reason", reason);
+            group.Parameters.AddWithValue("$id", id);
+            if (group.ExecuteNonQuery() == 0)
+                throw new InvalidOperationException("Группа не найдена или уже находится в архиве.");
+        }
+
+        int studentCount;
+        using (var students = conn.CreateCommand())
+        {
+            students.CommandText = """
+                UPDATE students
+                SET archived_at = $archivedAt, archive_reason = $reason
+                WHERE group_id = $id AND deleted_at IS NULL AND archived_at IS NULL
+                """;
+            students.Parameters.AddWithValue("$archivedAt", archivedAt);
+            students.Parameters.AddWithValue("$reason", reason);
+            students.Parameters.AddWithValue("$id", id);
+            studentCount = students.ExecuteNonQuery();
+        }
+
+        tx.Commit();
+        return studentCount;
+    }
+
+    public static int RestoreFromArchive(long id)
+    {
+        using var conn = Db.Open();
+        using var tx = conn.BeginTransaction();
+
+        string? archivedAt;
+        using (var read = conn.CreateCommand())
+        {
+            read.CommandText = "SELECT archived_at FROM groups WHERE id = $id AND deleted_at IS NULL";
+            read.Parameters.AddWithValue("$id", id);
+            archivedAt = read.ExecuteScalar() as string;
+        }
+        if (archivedAt == null)
+            throw new InvalidOperationException("Группа не найдена или не находится в архиве.");
+
+        int studentCount;
+        using (var students = conn.CreateCommand())
+        {
+            students.CommandText = """
+                UPDATE students
+                SET archived_at = NULL, archive_reason = NULL
+                WHERE group_id = $id AND deleted_at IS NULL AND archived_at = $archivedAt
+                """;
+            students.Parameters.AddWithValue("$archivedAt", archivedAt);
+            students.Parameters.AddWithValue("$id", id);
+            studentCount = students.ExecuteNonQuery();
+        }
+
+        using (var group = conn.CreateCommand())
+        {
+            group.CommandText = """
+                UPDATE groups SET archived_at = NULL, archive_reason = NULL
+                WHERE id = $id AND deleted_at IS NULL
+                """;
+            group.Parameters.AddWithValue("$id", id);
+            group.ExecuteNonQuery();
+        }
+
+        tx.Commit();
+        return studentCount;
+    }
 
     /// <summary>Увеличивает первую цифру в названиях групп (11-А → 21-А).</summary>
     public static int IncrementFirstDigitInAllGroups()

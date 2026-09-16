@@ -22,6 +22,8 @@ namespace MedSystem.App.Pages
         public string Fluorography { get; set; } = "";
         public bool IsExpired { get; set; }
         public bool IsExpiring { get; set; }
+        public Visibility ArchiveVisibility { get; set; }
+        public Visibility RestoreVisibility { get; set; }
         public Microsoft.UI.Xaml.Media.Brush SanminimumBg { get; set; } = Badges.TransparentBg;
         public Microsoft.UI.Xaml.Media.Brush SanminimumFg { get; set; } = Badges.NormalFg;
         public Microsoft.UI.Xaml.Media.Brush MedicalExamBg { get; set; } = Badges.TransparentBg;
@@ -53,7 +55,8 @@ namespace MedSystem.App.Pages
         private void LoadData()
         {
             var dark = ActualTheme == Microsoft.UI.Xaml.ElementTheme.Dark;
-            _allRows = EmployeeRepository.GetAll().Select(emp =>
+            var showArchived = LifecycleBox.SelectedIndex == 1;
+            _allRows = EmployeeRepository.GetAll(archived: showArchived).Select(emp =>
             {
                 var sanStatus = ExpirationRules.GetSingleCheckupStatus(emp.SanminimumDate);
                 var medStatus = ExpirationRules.GetSingleCheckupStatus(emp.MedicalExamDate);
@@ -73,11 +76,14 @@ namespace MedSystem.App.Pages
                     Fluorography = emp.FluorographyDate,
                     IsExpired = isExpired,
                     IsExpiring = isExpiring,
+                    ArchiveVisibility = showArchived ? Visibility.Collapsed : Visibility.Visible,
+                    RestoreVisibility = showArchived ? Visibility.Visible : Visibility.Collapsed,
                     SanminimumBg = sanBg, SanminimumFg = sanFg,
                     MedicalExamBg = medBg, MedicalExamFg = medFg,
                     FluorographyBg = fluBg, FluorographyFg = fluFg,
                 };
             }).ToList();
+            AddButton.IsEnabled = !showArchived;
             ApplyFilter();
         }
 
@@ -111,6 +117,13 @@ namespace MedSystem.App.Pages
 
         private void FilterBox_SelectionChanged(object sender, SelectionChangedEventArgs e) => ApplyFilter();
 
+        private void LifecycleBox_SelectionChanged(object sender, SelectionChangedEventArgs e)
+        {
+            if (LifecycleBox == null)
+                return;
+            LoadData();
+        }
+
         // ── Действия ─────────────────────────────────────────────────
 
         private void AddButton_Click(object sender, RoutedEventArgs e) =>
@@ -126,6 +139,44 @@ namespace MedSystem.App.Pages
         {
             if (sender is FrameworkElement { Tag: long id })
                 Frame.Navigate(typeof(EmployeeFormPage), id);
+        }
+
+        private async void ArchiveMenuItem_Click(object sender, RoutedEventArgs e)
+        {
+            if (sender is not FrameworkElement { Tag: long id })
+                return;
+
+            var reasonBox = new ComboBox
+            {
+                Header = "Причина",
+                MinWidth = 320,
+                ItemsSource = new[] { "Увольнение", "Перевод", "Другое" },
+                SelectedIndex = 0,
+            };
+            var dialog = new ContentDialog
+            {
+                Title = "Архивировать сотрудника?",
+                Content = reasonBox,
+                PrimaryButtonText = "Архивировать",
+                CloseButtonText = "Отмена",
+                DefaultButton = ContentDialogButton.Close,
+                XamlRoot = XamlRoot,
+                RequestedTheme = ActualTheme,
+            };
+            if (await dialog.ShowAsync() == ContentDialogResult.Primary)
+            {
+                EmployeeRepository.Archive(id, reasonBox.SelectedItem?.ToString() ?? "Другое");
+                LoadData();
+            }
+        }
+
+        private void RestoreArchiveMenuItem_Click(object sender, RoutedEventArgs e)
+        {
+            if (sender is FrameworkElement { Tag: long id })
+            {
+                EmployeeRepository.RestoreFromArchive(id);
+                LoadData();
+            }
         }
 
         private async void DeleteMenuItem_Click(object sender, RoutedEventArgs e)

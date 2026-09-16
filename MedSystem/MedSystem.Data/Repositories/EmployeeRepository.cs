@@ -15,16 +15,18 @@ public static class EmployeeRepository
     {
         using var conn = Db.Open();
         using var cmd = conn.CreateCommand();
-        cmd.CommandText = "SELECT COUNT(*) FROM employees WHERE deleted_at IS NULL";
+        cmd.CommandText = "SELECT COUNT(*) FROM employees WHERE deleted_at IS NULL AND archived_at IS NULL";
         return Convert.ToInt64(cmd.ExecuteScalar());
     }
 
-    public static List<Employee> GetAll()
+    public static List<Employee> GetAll(bool archived = false)
     {
         using var conn = Db.Open();
         using var cmd = conn.CreateCommand();
         cmd.CommandText = $"""
-            SELECT {Columns} FROM employees WHERE deleted_at IS NULL
+            SELECT {Columns} FROM employees
+            WHERE deleted_at IS NULL
+              AND archived_at IS {(archived ? "NOT NULL" : "NULL")}
             ORDER BY last_name, first_name, middle_name
             """;
         using var reader = cmd.ExecuteReader();
@@ -86,6 +88,34 @@ public static class EmployeeRepository
     }
 
     public static void MoveToTrash(long id) => TrashRepository.MoveToTrash("employee", id);
+
+    public static void Archive(long id, string reason)
+    {
+        using var conn = Db.Open();
+        using var cmd = conn.CreateCommand();
+        cmd.CommandText = """
+            UPDATE employees
+            SET archived_at = $archivedAt, archive_reason = $reason
+            WHERE id = $id AND deleted_at IS NULL AND archived_at IS NULL
+            """;
+        cmd.Parameters.AddWithValue("$archivedAt", DateTime.UtcNow.ToString("O"));
+        cmd.Parameters.AddWithValue("$reason", reason);
+        cmd.Parameters.AddWithValue("$id", id);
+        cmd.ExecuteNonQuery();
+    }
+
+    public static void RestoreFromArchive(long id)
+    {
+        using var conn = Db.Open();
+        using var cmd = conn.CreateCommand();
+        cmd.CommandText = """
+            UPDATE employees
+            SET archived_at = NULL, archive_reason = NULL
+            WHERE id = $id AND deleted_at IS NULL AND archived_at IS NOT NULL
+            """;
+        cmd.Parameters.AddWithValue("$id", id);
+        cmd.ExecuteNonQuery();
+    }
 
     private static Employee Map(Microsoft.Data.Sqlite.SqliteDataReader r) => new()
     {

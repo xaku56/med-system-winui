@@ -19,7 +19,7 @@
             <TextBlock Text="Сотрудники" Style="{StaticResource TitleTextBlockStyle}" />
             <StackPanel Orientation="Horizontal" Spacing="16" HorizontalAlignment="Right">
                 <TextBlock x:Name="CountText" Text="" VerticalAlignment="Center" Opacity="0.6" />
-                <Button Content="+ Добавить" Style="{StaticResource AccentButtonStyle}"
+                <Button x:Name="AddButton" Content="+ Добавить" Style="{StaticResource AccentButtonStyle}"
                         Click="AddButton_Click" />
             </StackPanel>
         </Grid>
@@ -28,6 +28,7 @@
         <Grid Grid.Row="1" Margin="0,16,0,12">
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="Auto" />
                 <ColumnDefinition Width="Auto" />
             </Grid.ColumnDefinitions>
             <TextBox x:Name="SearchBox"
@@ -39,6 +40,12 @@
                 <x:String>Все сотрудники</x:String>
                 <x:String>Просроченные</x:String>
                 <x:String>Истекают (2 недели)</x:String>
+            </ComboBox>
+            <ComboBox x:Name="LifecycleBox" Grid.Column="2" Margin="12,0,0,0"
+                      MinWidth="130" SelectedIndex="0"
+                      SelectionChanged="LifecycleBox_SelectionChanged">
+                <x:String>Активные</x:String>
+                <x:String>Архив</x:String>
             </ComboBox>
         </Grid>
 
@@ -78,6 +85,12 @@
                                         <MenuFlyoutItem Text="Открыть / Редактировать"
                                                         Tag="{x:Bind Id}" Click="OpenMenuItem_Click" />
                                         <MenuFlyoutSeparator />
+                                        <MenuFlyoutItem Text="Архивировать"
+                                                        Visibility="{x:Bind ArchiveVisibility}"
+                                                        Tag="{x:Bind Id}" Click="ArchiveMenuItem_Click" />
+                                        <MenuFlyoutItem Text="Восстановить из архива"
+                                                        Visibility="{x:Bind RestoreVisibility}"
+                                                        Tag="{x:Bind Id}" Click="RestoreArchiveMenuItem_Click" />
                                         <MenuFlyoutItem Text="В корзину"
                                                         Tag="{x:Bind Id}" Click="DeleteMenuItem_Click" />
                                     </MenuFlyout>

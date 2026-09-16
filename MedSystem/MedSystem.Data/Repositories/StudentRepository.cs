@@ -8,15 +8,15 @@ public static class StudentRepository
     {
         using var conn = Db.Open();
         using var cmd = conn.CreateCommand();
-        cmd.CommandText = "SELECT COUNT(*) FROM students WHERE deleted_at IS NULL";
+        cmd.CommandText = "SELECT COUNT(*) FROM students WHERE deleted_at IS NULL AND archived_at IS NULL";
         return Convert.ToInt64(cmd.ExecuteScalar());
     }
 
-    public static List<Student> GetAll()
+    public static List<Student> GetAll(bool archived = false)
     {
         using var conn = Db.Open();
         using var cmd = conn.CreateCommand();
-        cmd.CommandText = """
+        cmd.CommandText = $"""
             SELECT s.id, s.group_id, g.name, s.last_name, s.first_name, s.middle_name,
                    s.birth_date, s.oms, s.address,
                    s.sanminimum_date, s.medical_exam_date, s.fluorography_date,
@@ -24,6 +24,7 @@ public static class StudentRepository
             FROM students s
             LEFT JOIN groups g ON s.group_id = g.id
             WHERE s.deleted_at IS NULL
+              AND s.archived_at IS {(archived ? "NOT NULL" : "NULL")}
             ORDER BY s.last_name, s.first_name, s.middle_name
             """;
         using var reader = cmd.ExecuteReader();
@@ -123,6 +124,48 @@ public static class StudentRepository
     }
 
     public static void MoveToTrash(long id) => TrashRepository.MoveToTrash("student", id);
+
+    public static void Archive(long id, string reason)
+    {
+        using var conn = Db.Open();
+        using var cmd = conn.CreateCommand();
+        cmd.CommandText = """
+            UPDATE students
+            SET archived_at = $archivedAt, archive_reason = $reason
+            WHERE id = $id AND deleted_at IS NULL AND archived_at IS NULL
+            """;
+        cmd.Parameters.AddWithValue("$archivedAt", DateTime.UtcNow.ToString("O"));
+        cmd.Parameters.AddWithValue("$reason", reason);
+        cmd.Parameters.AddWithValue("$id", id);
+        cmd.ExecuteNonQuery();
+    }
+
+    public static void RestoreFromArchive(long id)
+    {
+        using var conn = Db.Open();
+        using var tx = conn.BeginTransaction();
+
+        using (var group = conn.CreateCommand())
+        {
+            group.CommandText = """
+                UPDATE groups SET archived_at = NULL, archive_reason = NULL
+                WHERE id = (SELECT group_id FROM students WHERE id = $id)
+                  AND deleted_at IS NULL AND archived_at IS NOT NULL
+                """;
+            group.Parameters.AddWithValue("$id", id);
+            group.ExecuteNonQuery();
+        }
+
+        using var cmd = conn.CreateCommand();
+        cmd.CommandText = """
+            UPDATE students
+            SET archived_at = NULL, archive_reason = NULL
+            WHERE id = $id AND deleted_at IS NULL AND archived_at IS NOT NULL
+            """;
+        cmd.Parameters.AddWithValue("$id", id);
+        cmd.ExecuteNonQuery();
+        tx.Commit();
+    }
 
     private static void AddParameters(Microsoft.Data.Sqlite.SqliteCommand cmd, Student s)
     {
