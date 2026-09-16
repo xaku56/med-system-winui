@@ -154,7 +154,7 @@ namespace MedSystem.App.Pages
             {
                 Header = "Причина",
                 MinWidth = 320,
-                ItemsSource = new[] { "Увольнение", "Перевод", "Другое" },
+                ItemsSource = new[] { "Не указано", "Увольнение", "Перевод", "Другое" },
                 SelectedIndex = 0,
             };
             var dialog = new ContentDialog
