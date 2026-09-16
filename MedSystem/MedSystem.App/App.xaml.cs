@@ -27,6 +27,8 @@ namespace MedSystem.App
     public partial class App : Application
     {
         private Window? _window;
+        public static Window? CurrentWindow { get; private set; }
+        public static string? StartupWarning { get; private set; }
 
         /// <summary>
         /// Initializes the singleton application object.  This is the first line of authored code
@@ -48,9 +50,20 @@ namespace MedSystem.App
             MedSystem.Data.Db.DbPath = System.IO.Path.Combine(
                 Windows.Storage.ApplicationData.Current.LocalFolder.Path,
                 "med_system.db");
+
+            try
+            {
+                MedSystem.Data.BackupService.CreateAutomaticBackupIfDue();
+            }
+            catch (Exception ex)
+            {
+                StartupWarning = $"Не удалось создать автоматическую резервную копию: {ex.Message}";
+            }
+
             MedSystem.Data.DatabaseInitializer.Initialize();
 
             _window = new MainWindow();
+            CurrentWindow = _window;
             _window.Activate();
         }
     }

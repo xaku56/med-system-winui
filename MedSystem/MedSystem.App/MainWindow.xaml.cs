@@ -35,6 +35,14 @@ namespace MedSystem.App
             ThemeHelper.Initialize(this);
             ContentFrame.Navigate(typeof(HomePage));
 
+            if (!string.IsNullOrWhiteSpace(App.StartupWarning))
+            {
+                StartupInfoBar.Title = "Резервное копирование";
+                StartupInfoBar.Message = App.StartupWarning;
+                StartupInfoBar.Severity = InfoBarSeverity.Warning;
+                StartupInfoBar.IsOpen = true;
+            }
+
             // Автоперевод групп на следующий курс (раз в год после 15 августа)
             DispatcherQueue.TryEnqueue(CheckAcademicYear);
         }
@@ -46,8 +54,10 @@ namespace MedSystem.App
                 var count = GroupRepository.CheckAndAutoIncrementGroups();
                 if (count > 0)
                 {
+                    StartupInfoBar.Title = "Новый учебный год";
                     StartupInfoBar.Message =
                         $"Начался новый учебный год! Групп переведено на следующий курс: {count}.";
+                    StartupInfoBar.Severity = InfoBarSeverity.Informational;
                     StartupInfoBar.IsOpen = true;
                 }
             }

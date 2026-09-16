@@ -25,6 +25,25 @@
         <Border CornerRadius="8" BorderThickness="1"
                 Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
                 BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}">
+            <StackPanel Padding="20,16" Spacing="10">
+                <TextBlock Text="Резервные копии" Style="{StaticResource BodyStrongTextBlockStyle}" />
+                <TextBlock Text="Автоматическая копия создаётся не чаще одного раза в сутки. Хранятся последние 10 копий."
+                           TextWrapping="Wrap" Opacity="0.7" />
+                <TextBlock x:Name="BackupStatusText" FontSize="12" Opacity="0.7" TextWrapping="Wrap" />
+                <StackPanel Orientation="Horizontal" Spacing="10">
+                    <Button x:Name="CreateBackupButton" Content="Создать копию"
+                            Click="CreateBackupButton_Click" />
+                    <Button x:Name="RestoreBackupButton" Content="Восстановить из копии"
+                            Click="RestoreBackupButton_Click" />
+                    <ProgressRing x:Name="BackupProgress" Width="20" Height="20"
+                                  IsActive="False" Visibility="Collapsed" />
+                </StackPanel>
+            </StackPanel>
+        </Border>
+
+        <Border CornerRadius="8" BorderThickness="1"
+                Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
+                BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}">
             <StackPanel Padding="20,16" Spacing="6">
                 <TextBlock Text="О программе" Style="{StaticResource BodyStrongTextBlockStyle}" />
                 <TextBlock Text="Медицинская система — учёт обращений, сотрудников, студентов и лекарств медпункта колледжа."
