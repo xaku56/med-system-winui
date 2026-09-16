@@ -6,6 +6,7 @@
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
     mc:Ignorable="d">
 
+    <ScrollViewer VerticalScrollBarVisibility="Auto">
     <StackPanel Padding="32,24,32,24" Spacing="16" MaxWidth="720" HorizontalAlignment="Left">
         <TextBlock Text="Настройки" Style="{StaticResource TitleTextBlockStyle}" />
 
@@ -19,6 +20,27 @@
                     <x:String>Светлая</x:String>
                     <x:String>Тёмная</x:String>
                 </RadioButtons>
+            </StackPanel>
+        </Border>
+
+        <Border CornerRadius="8" BorderThickness="1"
+                Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
+                BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}">
+            <StackPanel Padding="20,16" Spacing="10">
+                <TextBlock Text="Корзина" Style="{StaticResource BodyStrongTextBlockStyle}" />
+                <TextBlock Text="Удалённые записи можно восстановить до автоматической очистки."
+                           TextWrapping="Wrap" Opacity="0.7" />
+                <StackPanel Orientation="Horizontal" Spacing="10">
+                    <NumberBox x:Name="TrashRetentionBox" Header="Хранить, дней"
+                               Width="150" Minimum="1" Maximum="365"
+                               SpinButtonPlacementMode="Inline" />
+                    <CheckBox x:Name="NeverDeleteTrashCheckBox" Content="Не удалять автоматически"
+                              VerticalAlignment="Bottom" Margin="0,0,0,7"
+                              Checked="NeverDeleteTrashCheckBox_Changed"
+                              Unchecked="NeverDeleteTrashCheckBox_Changed" />
+                </StackPanel>
+                <Button Content="Сохранить срок хранения" HorizontalAlignment="Left"
+                        Click="SaveTrashRetentionButton_Click" />
             </StackPanel>
         </Border>
 
@@ -54,4 +76,5 @@
             </StackPanel>
         </Border>
     </StackPanel>
+    </ScrollViewer>
 </Page>

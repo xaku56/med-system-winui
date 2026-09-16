@@ -8,7 +8,7 @@ public static class MedicineRepository
     {
         using var conn = Db.Open();
         using var cmd = conn.CreateCommand();
-        cmd.CommandText = "SELECT COUNT(*) FROM medicines";
+        cmd.CommandText = "SELECT COUNT(*) FROM medicines WHERE deleted_at IS NULL";
         return Convert.ToInt64(cmd.ExecuteScalar());
     }
 
@@ -16,7 +16,7 @@ public static class MedicineRepository
     {
         using var conn = Db.Open();
         using var cmd = conn.CreateCommand();
-        cmd.CommandText = "SELECT id, name, dosage, quantity, expiration_date FROM medicines ORDER BY name";
+        cmd.CommandText = "SELECT id, name, dosage, quantity, expiration_date FROM medicines WHERE deleted_at IS NULL ORDER BY name";
         using var reader = cmd.ExecuteReader();
         var result = new List<Medicine>();
         while (reader.Read())
@@ -28,7 +28,7 @@ public static class MedicineRepository
     {
         using var conn = Db.Open();
         using var cmd = conn.CreateCommand();
-        cmd.CommandText = "SELECT id, name, dosage, quantity, expiration_date FROM medicines WHERE id = $id";
+        cmd.CommandText = "SELECT id, name, dosage, quantity, expiration_date FROM medicines WHERE id = $id AND deleted_at IS NULL";
         cmd.Parameters.AddWithValue("$id", id);
         using var reader = cmd.ExecuteReader();
         return reader.Read() ? Map(reader) : null;
@@ -53,21 +53,14 @@ public static class MedicineRepository
         cmd.CommandText = """
             UPDATE medicines
             SET name = $name, dosage = $dosage, quantity = $quantity, expiration_date = $expirationDate
-            WHERE id = $id
+            WHERE id = $id AND deleted_at IS NULL
             """;
         AddParameters(cmd, m);
         cmd.Parameters.AddWithValue("$id", m.Id);
         cmd.ExecuteNonQuery();
     }
 
-    public static void Delete(long id)
-    {
-        using var conn = Db.Open();
-        using var cmd = conn.CreateCommand();
-        cmd.CommandText = "DELETE FROM medicines WHERE id = $id";
-        cmd.Parameters.AddWithValue("$id", id);
-        cmd.ExecuteNonQuery();
-    }
+    public static void MoveToTrash(long id) => TrashRepository.MoveToTrash("medicine", id);
 
     /// <summary>
     /// Заказ партий: списывает старые и добавляет новые ОДНОЙ транзакцией.

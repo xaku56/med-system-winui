@@ -13,7 +13,7 @@ public static class AppealRepository
     {
         using var conn = Db.Open();
         using var cmd = conn.CreateCommand();
-        cmd.CommandText = "SELECT COUNT(*) FROM appeals";
+        cmd.CommandText = "SELECT COUNT(*) FROM appeals WHERE deleted_at IS NULL";
         return Convert.ToInt64(cmd.ExecuteScalar());
     }
 
@@ -21,7 +21,7 @@ public static class AppealRepository
     {
         using var conn = Db.Open();
         using var cmd = conn.CreateCommand();
-        cmd.CommandText = $"SELECT {Columns} FROM appeals ORDER BY number DESC";
+        cmd.CommandText = $"SELECT {Columns} FROM appeals WHERE deleted_at IS NULL ORDER BY number DESC";
         using var reader = cmd.ExecuteReader();
         var result = new List<Appeal>();
         while (reader.Read())
@@ -33,7 +33,7 @@ public static class AppealRepository
     {
         using var conn = Db.Open();
         using var cmd = conn.CreateCommand();
-        cmd.CommandText = $"SELECT {Columns} FROM appeals WHERE id = $id";
+        cmd.CommandText = $"SELECT {Columns} FROM appeals WHERE id = $id AND deleted_at IS NULL";
         cmd.Parameters.AddWithValue("$id", id);
         using var reader = cmd.ExecuteReader();
         return reader.Read() ? Map(reader) : null;
@@ -43,6 +43,7 @@ public static class AppealRepository
     {
         using var conn = Db.Open();
         using var cmd = conn.CreateCommand();
+        // Номер остаётся монотонным, даже если последнее обращение находится в корзине.
         cmd.CommandText = "SELECT MAX(number) FROM appeals";
         var result = cmd.ExecuteScalar();
         return result is DBNull or null ? 1 : Convert.ToInt64(result) + 1;
@@ -75,21 +76,14 @@ public static class AppealRepository
                 birth_date = $birthDate, parent_phone = $parentPhone,
                 group_name = $groupName, complaints = $complaints,
                 diagnosis = $diagnosis, actions_recommendations = $actions
-            WHERE id = $id
+            WHERE id = $id AND deleted_at IS NULL
             """;
         AddParameters(cmd, a);
         cmd.Parameters.AddWithValue("$id", a.Id);
         cmd.ExecuteNonQuery();
     }
 
-    public static void Delete(long id)
-    {
-        using var conn = Db.Open();
-        using var cmd = conn.CreateCommand();
-        cmd.CommandText = "DELETE FROM appeals WHERE id = $id";
-        cmd.Parameters.AddWithValue("$id", id);
-        cmd.ExecuteNonQuery();
-    }
+    public static void MoveToTrash(long id) => TrashRepository.MoveToTrash("appeal", id);
 
     /// <summary>Сотрудники и студенты одним списком — для выбора
     /// отправителя обращения (перенос fetch_persons_for_combobox).</summary>
@@ -103,6 +97,7 @@ public static class AppealRepository
             cmd.CommandText = """
                 SELECT last_name, first_name, middle_name, birth_date, affiliation
                 FROM employees
+                WHERE deleted_at IS NULL AND archived_at IS NULL
                 """;
             using var reader = cmd.ExecuteReader();
             while (reader.Read())
@@ -128,6 +123,7 @@ public static class AppealRepository
             cmd.CommandText = """
                 SELECT s.last_name, s.first_name, s.middle_name, s.birth_date, g.name
                 FROM students s LEFT JOIN groups g ON s.group_id = g.id
+                WHERE s.deleted_at IS NULL AND s.archived_at IS NULL
                 """;
             using var reader = cmd.ExecuteReader();
             while (reader.Read())

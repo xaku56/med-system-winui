@@ -225,9 +225,9 @@ namespace MedSystem.App.Pages
             var row = _allRows.FirstOrDefault(r => r.Id == id);
             var dialog = new ContentDialog
             {
-                Title = "Удаление",
-                Content = $"Удалить студента «{row?.FullName}»?",
-                PrimaryButtonText = "Удалить",
+                Title = "Перемещение в корзину",
+                Content = $"Переместить студента «{row?.FullName}» в корзину?",
+                PrimaryButtonText = "В корзину",
                 CloseButtonText = "Отмена",
                 DefaultButton = ContentDialogButton.Close,
                 XamlRoot = XamlRoot,
@@ -236,7 +236,7 @@ namespace MedSystem.App.Pages
 
             if (await dialog.ShowAsync() == ContentDialogResult.Primary)
             {
-                StudentRepository.Delete(id);
+                StudentRepository.MoveToTrash(id);
                 LoadData();
             }
         }

@@ -154,9 +154,9 @@ namespace MedSystem.App.Pages
             var row = _allRows.FirstOrDefault(r => r.Id == id);
             var dialog = new ContentDialog
             {
-                Title = "Удаление",
-                Content = $"Удалить лекарство «{row?.Name}»?",
-                PrimaryButtonText = "Удалить",
+                Title = "Перемещение в корзину",
+                Content = $"Переместить лекарство «{row?.Name}» в корзину?",
+                PrimaryButtonText = "В корзину",
                 CloseButtonText = "Отмена",
                 DefaultButton = ContentDialogButton.Close,
                 XamlRoot = XamlRoot,
@@ -165,7 +165,7 @@ namespace MedSystem.App.Pages
 
             if (await dialog.ShowAsync() == ContentDialogResult.Primary)
             {
-                MedicineRepository.Delete(id);
+                MedicineRepository.MoveToTrash(id);
                 LoadData();
             }
         }

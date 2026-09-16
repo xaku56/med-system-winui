@@ -1,4 +1,5 @@
 using System;
+using System.Threading.Tasks;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Media;
@@ -45,6 +46,22 @@ namespace MedSystem.App
 
             // Автоперевод групп на следующий курс (раз в год после 15 августа)
             DispatcherQueue.TryEnqueue(CheckAcademicYear);
+            DispatcherQueue.TryEnqueue(CleanupTrash);
+        }
+
+        private async void CleanupTrash()
+        {
+            try
+            {
+                await Task.Run(TrashRepository.PurgeExpired);
+            }
+            catch (Exception ex)
+            {
+                StartupInfoBar.Title = "Корзина";
+                StartupInfoBar.Message = $"Не удалось выполнить автоматическую очистку: {ex.Message}";
+                StartupInfoBar.Severity = InfoBarSeverity.Warning;
+                StartupInfoBar.IsOpen = true;
+            }
         }
 
         private void CheckAcademicYear()
@@ -86,6 +103,7 @@ namespace MedSystem.App
                 "students" => typeof(StudentsPage),
                 "medicines" => typeof(MedicinesPage),
                 "appeals" => typeof(AppealsPage),
+                "trash" => typeof(TrashPage),
                 _ => null,
             };
 

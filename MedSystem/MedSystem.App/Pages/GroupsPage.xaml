@@ -55,7 +55,7 @@
                                 <MenuFlyoutItem Text="Переименовать"
                                                 Tag="{x:Bind Id}" Click="RenameMenuItem_Click" />
                                 <MenuFlyoutSeparator />
-                                <MenuFlyoutItem Text="Удалить"
+                                <MenuFlyoutItem Text="В корзину"
                                                 Tag="{x:Bind Id}" Click="DeleteMenuItem_Click" />
                             </MenuFlyout>
                         </Grid.ContextFlyout>

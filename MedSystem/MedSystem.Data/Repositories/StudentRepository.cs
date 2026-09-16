@@ -8,7 +8,7 @@ public static class StudentRepository
     {
         using var conn = Db.Open();
         using var cmd = conn.CreateCommand();
-        cmd.CommandText = "SELECT COUNT(*) FROM students";
+        cmd.CommandText = "SELECT COUNT(*) FROM students WHERE deleted_at IS NULL";
         return Convert.ToInt64(cmd.ExecuteScalar());
     }
 
@@ -23,6 +23,7 @@ public static class StudentRepository
                    s.health_group
             FROM students s
             LEFT JOIN groups g ON s.group_id = g.id
+            WHERE s.deleted_at IS NULL
             ORDER BY s.last_name, s.first_name, s.middle_name
             """;
         using var reader = cmd.ExecuteReader();
@@ -60,7 +61,7 @@ public static class StudentRepository
                    s.health_group
             FROM students s
             LEFT JOIN groups g ON s.group_id = g.id
-            WHERE s.id = $id
+            WHERE s.id = $id AND s.deleted_at IS NULL
             """;
         cmd.Parameters.AddWithValue("$id", id);
         using var reader = cmd.ExecuteReader();
@@ -114,21 +115,14 @@ public static class StudentRepository
                 address = $address, sanminimum_date = $sanminimumDate,
                 medical_exam_date = $medicalExamDate, fluorography_date = $fluorographyDate,
                 health_group = $healthGroup
-            WHERE id = $id
+            WHERE id = $id AND deleted_at IS NULL
             """;
         AddParameters(cmd, s);
         cmd.Parameters.AddWithValue("$id", s.Id);
         cmd.ExecuteNonQuery();
     }
 
-    public static void Delete(long id)
-    {
-        using var conn = Db.Open();
-        using var cmd = conn.CreateCommand();
-        cmd.CommandText = "DELETE FROM students WHERE id = $id";
-        cmd.Parameters.AddWithValue("$id", id);
-        cmd.ExecuteNonQuery();
-    }
+    public static void MoveToTrash(long id) => TrashRepository.MoveToTrash("student", id);
 
     private static void AddParameters(Microsoft.Data.Sqlite.SqliteCommand cmd, Student s)
     {

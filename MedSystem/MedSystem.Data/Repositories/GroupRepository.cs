@@ -12,7 +12,7 @@ public static class GroupRepository
     {
         using var conn = Db.Open();
         using var cmd = conn.CreateCommand();
-        cmd.CommandText = "SELECT id, name FROM groups ORDER BY name";
+        cmd.CommandText = "SELECT id, name FROM groups WHERE deleted_at IS NULL AND archived_at IS NULL ORDER BY name";
         using var reader = cmd.ExecuteReader();
         var result = new List<Group>();
         while (reader.Read())
@@ -24,7 +24,7 @@ public static class GroupRepository
     {
         using var conn = Db.Open();
         using var cmd = conn.CreateCommand();
-        cmd.CommandText = "SELECT id, name FROM groups WHERE id = $id";
+        cmd.CommandText = "SELECT id, name FROM groups WHERE id = $id AND deleted_at IS NULL";
         cmd.Parameters.AddWithValue("$id", id);
         using var reader = cmd.ExecuteReader();
         if (!reader.Read())
@@ -40,7 +40,8 @@ public static class GroupRepository
         cmd.CommandText = """
             SELECT g.id, g.name, COUNT(s.id)
             FROM groups g
-            LEFT JOIN students s ON s.group_id = g.id
+            LEFT JOIN students s ON s.group_id = g.id AND s.deleted_at IS NULL
+            WHERE g.deleted_at IS NULL AND g.archived_at IS NULL
             GROUP BY g.id, g.name
             ORDER BY g.name
             """;
@@ -55,7 +56,7 @@ public static class GroupRepository
     {
         using var conn = Db.Open();
         using var cmd = conn.CreateCommand();
-        cmd.CommandText = "SELECT COUNT(*) FROM students WHERE group_id = $id";
+        cmd.CommandText = "SELECT COUNT(*) FROM students WHERE group_id = $id AND deleted_at IS NULL";
         cmd.Parameters.AddWithValue("$id", groupId);
         return Convert.ToInt64(cmd.ExecuteScalar());
     }
@@ -73,30 +74,13 @@ public static class GroupRepository
     {
         using var conn = Db.Open();
         using var cmd = conn.CreateCommand();
-        cmd.CommandText = "UPDATE groups SET name = $name WHERE id = $id";
+        cmd.CommandText = "UPDATE groups SET name = $name WHERE id = $id AND deleted_at IS NULL";
         cmd.Parameters.AddWithValue("$name", name);
         cmd.Parameters.AddWithValue("$id", id);
         cmd.ExecuteNonQuery();
     }
 
-    /// <summary>Удаляет группу; при cascade=true сначала студентов — одной транзакцией.</summary>
-    public static void Delete(long id, bool cascade = false)
-    {
-        using var conn = Db.Open();
-        using var tx = conn.BeginTransaction();
-        if (cascade)
-        {
-            using var delStudents = conn.CreateCommand();
-            delStudents.CommandText = "DELETE FROM students WHERE group_id = $id";
-            delStudents.Parameters.AddWithValue("$id", id);
-            delStudents.ExecuteNonQuery();
-        }
-        using var delGroup = conn.CreateCommand();
-        delGroup.CommandText = "DELETE FROM groups WHERE id = $id";
-        delGroup.Parameters.AddWithValue("$id", id);
-        delGroup.ExecuteNonQuery();
-        tx.Commit();
-    }
+    public static void MoveToTrash(long id) => TrashRepository.MoveToTrash("group", id);
 
     /// <summary>Увеличивает первую цифру в названиях групп (11-А → 21-А).</summary>
     public static int IncrementFirstDigitInAllGroups()
@@ -146,7 +130,7 @@ public static class GroupRepository
         var groups = new List<(long Id, string Name)>();
         using (var cmd = conn.CreateCommand())
         {
-            cmd.CommandText = "SELECT id, name FROM groups";
+            cmd.CommandText = "SELECT id, name FROM groups WHERE deleted_at IS NULL AND archived_at IS NULL";
             using var reader = cmd.ExecuteReader();
             while (reader.Read())
                 groups.Add((reader.GetInt64(0), reader.GetString(1)));

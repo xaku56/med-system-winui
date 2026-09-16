@@ -135,13 +135,19 @@ namespace MedSystem.App.Pages
                 return;
 
             var count = GroupRepository.GetStudentCount(id);
+            if (count > 0)
+            {
+                await ShowMessageAsync(
+                    "Группа не пуста",
+                    $"В группе «{row.Name}» {count} студент(ов). Сначала переведите студентов или дождитесь функции архивирования групп.");
+                return;
+            }
+
             var dialog = new ContentDialog
             {
-                Title = "Удаление группы",
-                Content = count > 0
-                    ? $"В группе «{row.Name}» {count} студент(ов). Они будут удалены вместе с группой. Продолжить?"
-                    : $"Удалить группу «{row.Name}»?",
-                PrimaryButtonText = count > 0 ? "Удалить всё" : "Удалить",
+                Title = "Перемещение в корзину",
+                Content = $"Переместить группу «{row.Name}» в корзину?",
+                PrimaryButtonText = "В корзину",
                 CloseButtonText = "Отмена",
                 DefaultButton = ContentDialogButton.Close,
                 XamlRoot = XamlRoot,
@@ -150,7 +156,7 @@ namespace MedSystem.App.Pages
 
             if (await dialog.ShowAsync() == ContentDialogResult.Primary)
             {
-                GroupRepository.Delete(id, cascade: count > 0);
+                GroupRepository.MoveToTrash(id);
                 LoadData();
             }
         }

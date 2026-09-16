@@ -6,6 +6,7 @@ using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Navigation;
 using MedSystem.Data;
+using MedSystem.Data.Repositories;
 using Windows.Storage.Pickers;
 
 namespace MedSystem.App.Pages
@@ -29,11 +30,48 @@ namespace MedSystem.App.Pages
                 ElementTheme.Dark => 2,
                 _ => 0,
             };
+            var retentionDays = TrashRepository.GetRetentionDays();
+            NeverDeleteTrashCheckBox.IsChecked = retentionDays == 0;
+            TrashRetentionBox.Value = retentionDays == 0
+                ? TrashRepository.DefaultRetentionDays
+                : retentionDays;
+            TrashRetentionBox.IsEnabled = retentionDays != 0;
             _loading = false;
             var version = Windows.ApplicationModel.Package.Current.Id.Version;
             VersionText.Text = $"Версия: {version.Major}.{version.Minor}.{version.Build}.{version.Revision}";
             DbPathText.Text = $"База данных: {Db.DbPath}";
             UpdateBackupStatus();
+        }
+
+        private void NeverDeleteTrashCheckBox_Changed(object sender, RoutedEventArgs e)
+        {
+            if (_loading)
+                return;
+
+            TrashRetentionBox.IsEnabled = NeverDeleteTrashCheckBox.IsChecked != true;
+        }
+
+        private async void SaveTrashRetentionButton_Click(object sender, RoutedEventArgs e)
+        {
+            var retentionDays = NeverDeleteTrashCheckBox.IsChecked == true
+                ? 0
+                : double.IsNaN(TrashRetentionBox.Value)
+                    ? TrashRepository.DefaultRetentionDays
+                    : (int)TrashRetentionBox.Value;
+
+            try
+            {
+                TrashRepository.SetRetentionDays(retentionDays);
+                await ShowMessageAsync(
+                    "Настройки сохранены",
+                    retentionDays == 0
+                        ? "Автоматическая очистка корзины отключена."
+                        : $"Записи будут храниться в корзине {retentionDays} дней.");
+            }
+            catch (Exception ex)
+            {
+                await ShowMessageAsync("Не удалось сохранить настройку", ex.Message);
+            }
         }
 
         private void ThemeRadios_SelectionChanged(object sender, SelectionChangedEventArgs e)

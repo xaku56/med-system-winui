@@ -78,7 +78,7 @@
                                         <MenuFlyoutItem Text="Открыть / Редактировать"
                                                         Tag="{x:Bind Id}" Click="OpenMenuItem_Click" />
                                         <MenuFlyoutSeparator />
-                                        <MenuFlyoutItem Text="Удалить"
+                                        <MenuFlyoutItem Text="В корзину"
                                                         Tag="{x:Bind Id}" Click="DeleteMenuItem_Click" />
                                     </MenuFlyout>
                                 </Grid.ContextFlyout>

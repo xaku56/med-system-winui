@@ -15,7 +15,7 @@ public static class EmployeeRepository
     {
         using var conn = Db.Open();
         using var cmd = conn.CreateCommand();
-        cmd.CommandText = "SELECT COUNT(*) FROM employees";
+        cmd.CommandText = "SELECT COUNT(*) FROM employees WHERE deleted_at IS NULL";
         return Convert.ToInt64(cmd.ExecuteScalar());
     }
 
@@ -24,7 +24,7 @@ public static class EmployeeRepository
         using var conn = Db.Open();
         using var cmd = conn.CreateCommand();
         cmd.CommandText = $"""
-            SELECT {Columns} FROM employees
+            SELECT {Columns} FROM employees WHERE deleted_at IS NULL
             ORDER BY last_name, first_name, middle_name
             """;
         using var reader = cmd.ExecuteReader();
@@ -38,7 +38,7 @@ public static class EmployeeRepository
     {
         using var conn = Db.Open();
         using var cmd = conn.CreateCommand();
-        cmd.CommandText = $"SELECT {Columns} FROM employees WHERE id = $id";
+        cmd.CommandText = $"SELECT {Columns} FROM employees WHERE id = $id AND deleted_at IS NULL";
         cmd.Parameters.AddWithValue("$id", id);
         using var reader = cmd.ExecuteReader();
         return reader.Read() ? Map(reader) : null;
@@ -78,21 +78,14 @@ public static class EmployeeRepository
                 passport_department_code = $passportDepartmentCode,
                 oms = $oms, address = $address, sanminimum_date = $sanminimumDate,
                 medical_exam_date = $medicalExamDate, fluorography_date = $fluorographyDate
-            WHERE id = $id
+            WHERE id = $id AND deleted_at IS NULL
             """;
         AddParameters(cmd, e);
         cmd.Parameters.AddWithValue("$id", e.Id);
         cmd.ExecuteNonQuery();
     }
 
-    public static void Delete(long id)
-    {
-        using var conn = Db.Open();
-        using var cmd = conn.CreateCommand();
-        cmd.CommandText = "DELETE FROM employees WHERE id = $id";
-        cmd.Parameters.AddWithValue("$id", id);
-        cmd.ExecuteNonQuery();
-    }
+    public static void MoveToTrash(long id) => TrashRepository.MoveToTrash("employee", id);
 
     private static Employee Map(Microsoft.Data.Sqlite.SqliteDataReader r) => new()
     {

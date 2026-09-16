@@ -113,9 +113,9 @@ namespace MedSystem.App.Pages
             var row = _allRows.FirstOrDefault(r => r.Id == id);
             var dialog = new ContentDialog
             {
-                Title = "Удаление",
-                Content = $"Удалить обращение №{row?.Number}?",
-                PrimaryButtonText = "Удалить",
+                Title = "Перемещение в корзину",
+                Content = $"Переместить обращение №{row?.Number} в корзину?",
+                PrimaryButtonText = "В корзину",
                 CloseButtonText = "Отмена",
                 DefaultButton = ContentDialogButton.Close,
                 XamlRoot = XamlRoot,
@@ -124,7 +124,7 @@ namespace MedSystem.App.Pages
 
             if (await dialog.ShowAsync() == ContentDialogResult.Primary)
             {
-                AppealRepository.Delete(id);
+                AppealRepository.MoveToTrash(id);
                 LoadData();
             }
         }
