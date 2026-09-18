@@ -12,16 +12,30 @@
             <RowDefinition Height="Auto" />
             <RowDefinition Height="Auto" />
             <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
             <RowDefinition Height="*" />
         </Grid.RowDefinitions>
 
-        <StackPanel Grid.Row="0" Spacing="4">
-            <TextBlock Text="Главная" Style="{StaticResource TitleTextBlockStyle}" />
-            <TextBlock Text="Обзор системы" Style="{StaticResource BodyTextBlockStyle}" Opacity="0.6" />
-        </StackPanel>
+        <Grid Grid.Row="0">
+            <StackPanel Spacing="4">
+                <TextBlock Text="Главная" Style="{StaticResource TitleTextBlockStyle}" />
+                <TextBlock Text="Обзор системы" Style="{StaticResource BodyTextBlockStyle}" Opacity="0.6" />
+            </StackPanel>
+            <StackPanel Orientation="Horizontal" Spacing="10" HorizontalAlignment="Right"
+                        VerticalAlignment="Center">
+                <TextBlock x:Name="BackupStatusText" Opacity="0.6" VerticalAlignment="Center" />
+                <ProgressRing x:Name="DashboardProgress" Width="20" Height="20"
+                              IsActive="False" Visibility="Collapsed" />
+            </StackPanel>
+        </Grid>
+
+        <InfoBar x:Name="ErrorBar" Grid.Row="1" Margin="0,16,0,0"
+                 IsOpen="False" Severity="Error" Title="Не удалось обновить главную страницу" />
 
         <!-- Показатели: карточки на всю ширину -->
-        <Grid Grid.Row="1" Margin="0,20,0,0" ColumnSpacing="12">
+        <Grid Grid.Row="2" Margin="0,20,0,0" ColumnSpacing="12">
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="*" />
                 <ColumnDefinition Width="*" />
@@ -29,45 +43,94 @@
                 <ColumnDefinition Width="*" />
             </Grid.ColumnDefinitions>
 
-            <Border Grid.Column="0" CornerRadius="8" BorderThickness="1" Padding="20"
+            <Button Grid.Column="0" CornerRadius="8" BorderThickness="1" Padding="20"
+                    HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch"
                     Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
-                    BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}">
+                    BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                    Click="OpenEmployees_Click">
                 <StackPanel Spacing="4">
-                    <TextBlock x:Name="EmployeesCount" Text="0" Style="{StaticResource SubtitleTextBlockStyle}" />
+                    <TextBlock x:Name="EmployeesCount" Text="—" Style="{StaticResource SubtitleTextBlockStyle}" />
                     <TextBlock Text="Сотрудники" Opacity="0.6" />
                 </StackPanel>
-            </Border>
-            <Border Grid.Column="1" CornerRadius="8" BorderThickness="1" Padding="20"
+            </Button>
+            <Button Grid.Column="1" CornerRadius="8" BorderThickness="1" Padding="20"
+                    HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch"
                     Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
-                    BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}">
+                    BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                    Click="OpenStudents_Click">
                 <StackPanel Spacing="4">
-                    <TextBlock x:Name="StudentsCount" Text="0" Style="{StaticResource SubtitleTextBlockStyle}" />
+                    <TextBlock x:Name="StudentsCount" Text="—" Style="{StaticResource SubtitleTextBlockStyle}" />
                     <TextBlock Text="Студенты" Opacity="0.6" />
                 </StackPanel>
-            </Border>
-            <Border Grid.Column="2" CornerRadius="8" BorderThickness="1" Padding="20"
+            </Button>
+            <Button Grid.Column="2" CornerRadius="8" BorderThickness="1" Padding="20"
+                    HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch"
                     Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
-                    BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}">
+                    BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                    Click="OpenMedicines_Click">
                 <StackPanel Spacing="4">
-                    <TextBlock x:Name="MedicinesCount" Text="0" Style="{StaticResource SubtitleTextBlockStyle}" />
+                    <TextBlock x:Name="MedicinesCount" Text="—" Style="{StaticResource SubtitleTextBlockStyle}" />
                     <TextBlock Text="Лекарства" Opacity="0.6" />
                 </StackPanel>
-            </Border>
-            <Border Grid.Column="3" CornerRadius="8" BorderThickness="1" Padding="20"
+            </Button>
+            <Button Grid.Column="3" CornerRadius="8" BorderThickness="1" Padding="20"
+                    HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch"
                     Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
-                    BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}">
+                    BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                    Click="OpenAppeals_Click">
                 <StackPanel Spacing="4">
-                    <TextBlock x:Name="AppealsCount" Text="0" Style="{StaticResource SubtitleTextBlockStyle}" />
+                    <TextBlock x:Name="AppealsCount" Text="—" Style="{StaticResource SubtitleTextBlockStyle}" />
                     <TextBlock Text="Обращения" Opacity="0.6" />
                 </StackPanel>
-            </Border>
+            </Button>
+        </Grid>
+
+        <TextBlock Grid.Row="3" Text="Требует внимания" Margin="0,28,0,12"
+                   Style="{StaticResource BodyStrongTextBlockStyle}" />
+
+        <Grid Grid.Row="4" ColumnSpacing="12">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="*" />
+            </Grid.ColumnDefinitions>
+
+            <Button Grid.Column="0" Padding="16" HorizontalAlignment="Stretch"
+                    HorizontalContentAlignment="Stretch" Click="OpenEmployees_Click">
+                <StackPanel Spacing="4">
+                    <TextBlock Text="Документы сотрудников" Style="{StaticResource BodyStrongTextBlockStyle}" />
+                    <TextBlock x:Name="EmployeeAttentionText" Text="Обновление…" Opacity="0.7" TextWrapping="Wrap" />
+                </StackPanel>
+            </Button>
+            <Button Grid.Column="1" Padding="16" HorizontalAlignment="Stretch"
+                    HorizontalContentAlignment="Stretch" Click="OpenStudents_Click">
+                <StackPanel Spacing="4">
+                    <TextBlock Text="Документы студентов" Style="{StaticResource BodyStrongTextBlockStyle}" />
+                    <TextBlock x:Name="StudentAttentionText" Text="Обновление…" Opacity="0.7" TextWrapping="Wrap" />
+                </StackPanel>
+            </Button>
+            <Button Grid.Column="2" Padding="16" HorizontalAlignment="Stretch"
+                    HorizontalContentAlignment="Stretch" Click="OpenMedicines_Click">
+                <StackPanel Spacing="4">
+                    <TextBlock Text="Запасы лекарств" Style="{StaticResource BodyStrongTextBlockStyle}" />
+                    <TextBlock x:Name="MedicineAttentionText" Text="Обновление…" Opacity="0.7" TextWrapping="Wrap" />
+                </StackPanel>
+            </Button>
+            <Button Grid.Column="3" Padding="16" HorizontalAlignment="Stretch"
+                    HorizontalContentAlignment="Stretch" Click="OpenTrash_Click">
+                <StackPanel Spacing="4">
+                    <TextBlock Text="Корзина" Style="{StaticResource BodyStrongTextBlockStyle}" />
+                    <TextBlock x:Name="TrashAttentionText" Text="Обновление…" Opacity="0.7" TextWrapping="Wrap" />
+                </StackPanel>
+            </Button>
         </Grid>
 
         <!-- Быстрые действия -->
-        <TextBlock Grid.Row="2" Text="Быстрые действия" Margin="0,28,0,12"
+        <TextBlock Grid.Row="5" Text="Быстрые действия" Margin="0,28,0,12"
                    Style="{StaticResource BodyStrongTextBlockStyle}" />
 
-        <Grid Grid.Row="3" ColumnSpacing="12">
+        <Grid Grid.Row="6" ColumnSpacing="12">
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="*" />
                 <ColumnDefinition Width="*" />
