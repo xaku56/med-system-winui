@@ -90,10 +90,10 @@
 
         <Grid Grid.Row="4" ColumnSpacing="12">
             <Grid.ColumnDefinitions>
-                <ColumnDefinition Width="*" />
-                <ColumnDefinition Width="*" />
-                <ColumnDefinition Width="*" />
-                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="1.1*" />
+                <ColumnDefinition Width="1.1*" />
+                <ColumnDefinition Width="1.4*" />
+                <ColumnDefinition Width="0.8*" />
             </Grid.ColumnDefinitions>
 
             <Button Grid.Column="0" Padding="16" HorizontalAlignment="Stretch"
