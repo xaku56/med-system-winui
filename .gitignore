@@ -37,6 +37,14 @@ artifacts/
 AppPackages/
 BundleArtifacts/
 *.pfx
+*.cer
+
+# Локальные базы данных и служебные файлы SQLite
+*.db
+*.db-shm
+*.db-wal
+*.sqlite
+*.sqlite3
 
 # Тесты и покрытие
 TestResults/

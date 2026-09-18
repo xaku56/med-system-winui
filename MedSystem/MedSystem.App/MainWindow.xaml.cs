@@ -64,11 +64,11 @@ namespace MedSystem.App
             }
         }
 
-        private void CheckAcademicYear()
+        private async void CheckAcademicYear()
         {
             try
             {
-                var count = GroupRepository.CheckAndAutoIncrementGroups();
+                var count = await Task.Run(GroupRepository.CheckAndAutoIncrementGroups);
                 if (count > 0)
                 {
                     StartupInfoBar.Title = "Новый учебный год";
@@ -78,9 +78,12 @@ namespace MedSystem.App
                     StartupInfoBar.IsOpen = true;
                 }
             }
-            catch
+            catch (Exception ex)
             {
-                // Не мешаем запуску приложения
+                StartupInfoBar.Title = "Учебные группы";
+                StartupInfoBar.Message = $"Не удалось проверить перевод на следующий курс: {ex.Message}";
+                StartupInfoBar.Severity = InfoBarSeverity.Warning;
+                StartupInfoBar.IsOpen = true;
             }
         }
 

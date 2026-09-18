@@ -58,7 +58,8 @@
                 <TextBox x:Name="GroupNameBox" Header="Группа / принадлежность" MaxLength="64" />
 
                 <TextBox x:Name="ComplaintsBox" Header="Жалобы"
-                         AcceptsReturn="True" TextWrapping="Wrap" Height="90" />
+                         AcceptsReturn="True" TextWrapping="Wrap" Height="90"
+                         MaxLength="2000" />
 
                 <Grid>
                     <AutoSuggestBox x:Name="DiagnosisBox"
@@ -72,7 +73,8 @@
                 </Grid>
 
                 <TextBox x:Name="ActionsBox" Header="Действия и рекомендации"
-                         AcceptsReturn="True" TextWrapping="Wrap" Height="90" />
+                         AcceptsReturn="True" TextWrapping="Wrap" Height="90"
+                         MaxLength="2000" />
             </StackPanel>
         </ScrollViewer>
 

@@ -84,23 +84,41 @@ public static class GroupRepository
         return Convert.ToInt64(cmd.ExecuteScalar());
     }
 
-    public static void Insert(string name)
+    /// <summary>Возвращает false, если группа с таким названием уже существует.</summary>
+    public static bool Insert(string name)
     {
-        using var conn = Db.Open();
-        using var cmd = conn.CreateCommand();
-        cmd.CommandText = "INSERT INTO groups (name) VALUES ($name)";
-        cmd.Parameters.AddWithValue("$name", name);
-        cmd.ExecuteNonQuery();
+        try
+        {
+            using var conn = Db.Open();
+            using var cmd = conn.CreateCommand();
+            cmd.CommandText = "INSERT INTO groups (name) VALUES ($name)";
+            cmd.Parameters.AddWithValue("$name", name);
+            cmd.ExecuteNonQuery();
+            return true;
+        }
+        catch (SqliteException ex) when (ex.SqliteErrorCode == 19)
+        {
+            return false;
+        }
     }
 
-    public static void Update(long id, string name)
+    /// <summary>Возвращает false, если новое название конфликтует с существующим.</summary>
+    public static bool Update(long id, string name)
     {
-        using var conn = Db.Open();
-        using var cmd = conn.CreateCommand();
-        cmd.CommandText = "UPDATE groups SET name = $name WHERE id = $id AND deleted_at IS NULL";
-        cmd.Parameters.AddWithValue("$name", name);
-        cmd.Parameters.AddWithValue("$id", id);
-        cmd.ExecuteNonQuery();
+        try
+        {
+            using var conn = Db.Open();
+            using var cmd = conn.CreateCommand();
+            cmd.CommandText = "UPDATE groups SET name = $name WHERE id = $id AND deleted_at IS NULL";
+            cmd.Parameters.AddWithValue("$name", name);
+            cmd.Parameters.AddWithValue("$id", id);
+            cmd.ExecuteNonQuery();
+            return true;
+        }
+        catch (SqliteException ex) when (ex.SqliteErrorCode == 19)
+        {
+            return false;
+        }
     }
 
     public static void MoveToTrash(long id) => TrashRepository.MoveToTrash("group", id);
@@ -266,7 +284,7 @@ public static class GroupRepository
                 cmd.ExecuteNonQuery();
                 count++;
             }
-            catch (SqliteException)
+            catch (SqliteException ex) when (ex.SqliteErrorCode == 19)
             {
                 throw new InvalidOperationException(
                     $"Не удалось перевести группу '{oldName}': группа '{newName}' уже существует.");

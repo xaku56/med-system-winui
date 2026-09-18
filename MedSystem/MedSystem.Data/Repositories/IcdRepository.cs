@@ -1,4 +1,5 @@
 using MedSystem.Core.Models;
+using Microsoft.Data.Sqlite;
 
 namespace MedSystem.Data.Repositories;
 
@@ -87,7 +88,7 @@ public static class IcdRepository
             cmd.ExecuteNonQuery();
             return true;
         }
-        catch (Microsoft.Data.Sqlite.SqliteException)
+        catch (SqliteException ex) when (ex.SqliteErrorCode == 19)
         {
             return false;
         }
@@ -115,7 +116,7 @@ public static class IcdRepository
             cmd.ExecuteNonQuery();
             return true;
         }
-        catch (Microsoft.Data.Sqlite.SqliteException)
+        catch (SqliteException ex) when (ex.SqliteErrorCode == 19)
         {
             return false;
         }

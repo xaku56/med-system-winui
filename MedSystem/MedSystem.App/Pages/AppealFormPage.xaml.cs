@@ -201,6 +201,12 @@ namespace MedSystem.App.Pages
 
         private async void SaveButton_Click(object sender, RoutedEventArgs e)
         {
+            if (double.IsNaN(NumberBox.Value) || NumberBox.Value != Math.Truncate(NumberBox.Value))
+            {
+                await ShowErrorsAsync(new() { "Номер обращения должен быть целым числом." });
+                return;
+            }
+
             var appeal = CollectForm();
 
             var errors = Validators.ValidateAppeal(appeal);

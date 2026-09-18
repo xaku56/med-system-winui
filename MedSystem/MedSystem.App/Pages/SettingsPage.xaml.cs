@@ -53,11 +53,17 @@ namespace MedSystem.App.Pages
 
         private async void SaveTrashRetentionButton_Click(object sender, RoutedEventArgs e)
         {
+            if (NeverDeleteTrashCheckBox.IsChecked != true &&
+                (double.IsNaN(TrashRetentionBox.Value) ||
+                 TrashRetentionBox.Value != Math.Truncate(TrashRetentionBox.Value)))
+            {
+                await ShowMessageAsync("Проверьте срок хранения", "Количество дней должно быть целым числом.");
+                return;
+            }
+
             var retentionDays = NeverDeleteTrashCheckBox.IsChecked == true
                 ? 0
-                : double.IsNaN(TrashRetentionBox.Value)
-                    ? TrashRepository.DefaultRetentionDays
-                    : (int)TrashRetentionBox.Value;
+                : (int)TrashRetentionBox.Value;
 
             try
             {

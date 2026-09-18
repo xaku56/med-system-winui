@@ -81,7 +81,12 @@ public static class Validators
             errors.Add("Номер обращения должен быть положительным числом.");
         CheckDate(errors, a.CreatedAt, "Дата обращения");
         CheckText(errors, a.Sender, "Отправитель", maxLength: 255);
+        CheckDate(errors, a.BirthDate, "Дата рождения", required: false);
+        CheckText(errors, a.ParentPhone, "Телефон родителя", maxLength: 20, required: false);
+        CheckText(errors, a.GroupName, "Группа / принадлежность", maxLength: 64, required: false);
         CheckText(errors, a.Complaints, "Жалобы", maxLength: 2000);
+        CheckText(errors, a.Diagnosis, "Диагноз", maxLength: 255, required: false);
+        CheckText(errors, a.ActionsRecommendations, "Действия и рекомендации", maxLength: 2000, required: false);
         return errors;
     }
 

@@ -51,6 +51,12 @@ namespace MedSystem.App.Pages
 
         private async void SaveButton_Click(object sender, RoutedEventArgs e)
         {
+            if (double.IsNaN(QuantityBox.Value) || QuantityBox.Value != Math.Truncate(QuantityBox.Value))
+            {
+                await ShowErrorsAsync(new() { "Количество должно быть целым числом." });
+                return;
+            }
+
             var medicine = CollectForm();
 
             var errors = Validators.ValidateMedicine(medicine);

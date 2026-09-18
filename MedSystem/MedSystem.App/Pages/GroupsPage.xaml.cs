@@ -133,14 +133,18 @@ namespace MedSystem.App.Pages
 
             try
             {
-                if (existing == null)
-                    GroupRepository.Insert(name);
-                else
-                    GroupRepository.Update(existing.Id, name);
+                var saved = existing == null
+                    ? GroupRepository.Insert(name)
+                    : GroupRepository.Update(existing.Id, name);
+                if (!saved)
+                {
+                    await ShowMessageAsync("Ошибка", $"Группа «{name}» уже существует.");
+                    return;
+                }
             }
-            catch (Exception)
+            catch (Exception ex)
             {
-                await ShowMessageAsync("Ошибка", $"Группа «{name}» уже существует.");
+                await ShowMessageAsync("Не удалось сохранить группу", ex.Message);
                 return;
             }
 

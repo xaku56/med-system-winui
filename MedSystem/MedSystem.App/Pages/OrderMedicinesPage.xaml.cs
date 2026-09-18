@@ -67,6 +67,8 @@ namespace MedSystem.App.Pages
             {
                 if (double.IsNaN(row.NewQuantity) || row.NewQuantity < 1)
                     errors.Add($"«{row.RealName}»: укажите новое количество.");
+                else if (row.NewQuantity != Math.Truncate(row.NewQuantity))
+                    errors.Add($"«{row.RealName}»: количество должно быть целым числом.");
                 if (!Validators.IsValidDate(row.NewExpiration.Trim()))
                     errors.Add($"«{row.RealName}»: новый срок годности должен быть в формате ДД.ММ.ГГГГ.");
             }

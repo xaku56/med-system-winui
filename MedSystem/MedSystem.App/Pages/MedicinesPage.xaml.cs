@@ -239,7 +239,7 @@ namespace MedSystem.App.Pages
                     Content = "Все лекарства в норме. Заказывать ничего не нужно.",
                     CloseButtonText = "Понятно",
                     XamlRoot = XamlRoot,
-                RequestedTheme = ActualTheme,
+                    RequestedTheme = ActualTheme,
                 };
                 await dialog.ShowAsync();
                 return;

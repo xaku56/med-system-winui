@@ -47,8 +47,9 @@ namespace MedSystem.App.Pages
         private async Task LoadAsync()
         {
             _loadCancellation?.Cancel();
-            _loadCancellation = new CancellationTokenSource();
-            var token = _loadCancellation.Token;
+            var cancellation = new CancellationTokenSource();
+            _loadCancellation = cancellation;
+            var token = cancellation.Token;
             SetLoading(true);
             ErrorBar.IsOpen = false;
 
@@ -104,8 +105,12 @@ namespace MedSystem.App.Pages
             }
             finally
             {
-                if (!token.IsCancellationRequested)
+                if (ReferenceEquals(_loadCancellation, cancellation))
+                {
+                    _loadCancellation = null;
                     SetLoading(false);
+                }
+                cancellation.Dispose();
             }
         }
 

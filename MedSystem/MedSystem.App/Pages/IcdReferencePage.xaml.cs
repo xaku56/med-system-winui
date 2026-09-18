@@ -224,9 +224,18 @@ namespace MedSystem.App.Pages
                 return;
             }
 
-            var ok = existing == null
-                ? IcdRepository.Insert(code, name)
-                : IcdRepository.Update(existing.Code, code, name);
+            bool ok;
+            try
+            {
+                ok = existing == null
+                    ? IcdRepository.Insert(code, name)
+                    : IcdRepository.Update(existing.Code, code, name);
+            }
+            catch (Exception ex)
+            {
+                await ShowMessageAsync("Не удалось сохранить код МКБ", ex.Message);
+                return;
+            }
 
             if (!ok)
             {
@@ -257,8 +266,15 @@ namespace MedSystem.App.Pages
 
             if (await dialog.ShowAsync() == ContentDialogResult.Primary)
             {
-                IcdRepository.Delete(code);
-                await LoadDataAsync();
+                try
+                {
+                    IcdRepository.Delete(code);
+                    await LoadDataAsync();
+                }
+                catch (Exception ex)
+                {
+                    await ShowMessageAsync("Не удалось удалить код МКБ", ex.Message);
+                }
             }
         }
 
