@@ -2,6 +2,22 @@ using MedSystem.Core.Models;
 
 namespace MedSystem.Data.Repositories;
 
+public sealed class EmployeePageRequest
+{
+    public string SearchText { get; init; } = "";
+    public int StatusFilter { get; init; }
+    public bool Archived { get; init; }
+    public int Page { get; init; } = 1;
+    public int PageSize { get; init; } = 100;
+}
+
+public sealed class EmployeePageResult
+{
+    public required List<Employee> Items { get; init; }
+    public long TotalCount { get; init; }
+    public int Page { get; init; }
+}
+
 public static class EmployeeRepository
 {
     private const string Columns = """
@@ -20,21 +36,58 @@ public static class EmployeeRepository
         return Convert.ToInt64(cmd.ExecuteScalar());
     }
 
-    public static List<Employee> GetAll(bool archived = false)
+    public static EmployeePageResult GetPage(EmployeePageRequest request)
     {
+        var pageSize = Math.Clamp(request.PageSize, 1, 200);
+        var requestedPage = Math.Max(request.Page, 1);
+        var where = new List<string>
+        {
+            "deleted_at IS NULL",
+            request.Archived ? "archived_at IS NOT NULL" : "archived_at IS NULL",
+        };
+
         using var conn = Db.Open();
         using var cmd = conn.CreateCommand();
+
+        var search = request.SearchText.Trim();
+        if (search.Length > 0)
+        {
+            where.Add("(contains_ci(last_name || ' ' || first_name || ' ' || middle_name, $search) OR contains_ci(oms, $search))");
+            cmd.Parameters.AddWithValue("$search", search);
+        }
+
+        if (request.StatusFilter is 1 or 2)
+        {
+            var statusFlag = request.StatusFilter == 1 ? 1 : 2;
+            where.Add("(person_status(sanminimum_date, medical_exam_date, fluorography_date) & $statusFlag) <> 0");
+            cmd.Parameters.AddWithValue("$statusFlag", statusFlag);
+        }
+
+        var whereSql = string.Join(" AND ", where);
+        cmd.CommandText = $"SELECT COUNT(*) FROM employees WHERE {whereSql}";
+        var totalCount = Convert.ToInt64(cmd.ExecuteScalar());
+        var totalPages = Math.Max(1, (int)Math.Ceiling(totalCount / (double)pageSize));
+        var page = Math.Min(requestedPage, totalPages);
+
+        cmd.Parameters.AddWithValue("$limit", pageSize);
+        cmd.Parameters.AddWithValue("$offset", (page - 1) * pageSize);
         cmd.CommandText = $"""
             SELECT {Columns} FROM employees
-            WHERE deleted_at IS NULL
-              AND archived_at IS {(archived ? "NOT NULL" : "NULL")}
-            ORDER BY last_name, first_name, middle_name
+            WHERE {whereSql}
+            ORDER BY last_name, first_name, middle_name, id
+            LIMIT $limit OFFSET $offset
             """;
         using var reader = cmd.ExecuteReader();
-        var result = new List<Employee>();
+        var items = new List<Employee>(pageSize);
         while (reader.Read())
-            result.Add(Map(reader));
-        return result;
+            items.Add(Map(reader));
+
+        return new EmployeePageResult
+        {
+            Items = items,
+            TotalCount = totalCount,
+            Page = page,
+        };
     }
 
     public static Employee? GetById(long id)

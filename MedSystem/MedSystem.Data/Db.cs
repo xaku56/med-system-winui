@@ -29,7 +29,7 @@ public static class Db
                 && !string.IsNullOrEmpty(query)
                 && value.Contains(query, StringComparison.OrdinalIgnoreCase));
         conn.CreateFunction<string?, string?, string?, int>(
-            "student_status",
+            "person_status",
             (sanminimum, medicalExam, fluorography) =>
             {
                 var (isExpired, isExpiring) = ExpirationRules.GetPersonStatus(

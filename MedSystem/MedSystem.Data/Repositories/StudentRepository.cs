@@ -72,7 +72,7 @@ public static class StudentRepository
         if (request.StatusFilter is 1 or 2)
         {
             var statusFlag = request.StatusFilter == 1 ? 1 : 2;
-            where.Add("(student_status(s.sanminimum_date, s.medical_exam_date, s.fluorography_date) & $statusFlag) <> 0");
+            where.Add("(person_status(s.sanminimum_date, s.medical_exam_date, s.fluorography_date) & $statusFlag) <> 0");
             cmd.Parameters.AddWithValue("$statusFlag", statusFlag);
         }
 
