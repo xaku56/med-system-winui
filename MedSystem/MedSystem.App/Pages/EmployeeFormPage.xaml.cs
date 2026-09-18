@@ -1,4 +1,5 @@
 using System;
+using System.Linq;
 using System.Threading.Tasks;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
@@ -94,17 +95,29 @@ namespace MedSystem.App.Pages
                 return;
             }
 
+            SaveButton.IsEnabled = false;
             try
             {
-                if (_employeeId > 0)
-                    EmployeeRepository.Update(employee);
-                else
-                    EmployeeRepository.Insert(employee);
+                var duplicates = await Task.Run(() => EmployeeRepository.FindDuplicates(employee));
+                if (duplicates.Count > 0 && !await ConfirmDuplicatesAsync(duplicates))
+                    return;
+
+                await Task.Run(() =>
+                {
+                    if (_employeeId > 0)
+                        EmployeeRepository.Update(employee);
+                    else
+                        EmployeeRepository.Insert(employee);
+                });
             }
             catch (Exception ex)
             {
                 await ShowErrorsAsync(new() { $"Ошибка базы данных: {ex.Message}" });
                 return;
+            }
+            finally
+            {
+                SaveButton.IsEnabled = true;
             }
 
             if (Frame.CanGoBack)
@@ -128,6 +141,24 @@ namespace MedSystem.App.Pages
                 RequestedTheme = ActualTheme,
             };
             await dialog.ShowAsync();
+        }
+
+        private async Task<bool> ConfirmDuplicatesAsync(
+            System.Collections.Generic.List<string> duplicates)
+        {
+            var dialog = new ContentDialog
+            {
+                Title = "Возможный дубликат",
+                Content = "Найдены похожие записи:\n\n"
+                    + string.Join("\n", duplicates.Select(item => $"• {item}"))
+                    + "\n\nСохранить сотрудника всё равно?",
+                PrimaryButtonText = "Сохранить всё равно",
+                CloseButtonText = "Вернуться",
+                DefaultButton = ContentDialogButton.Close,
+                XamlRoot = XamlRoot,
+                RequestedTheme = ActualTheme,
+            };
+            return await dialog.ShowAsync() == ContentDialogResult.Primary;
         }
     }
 }

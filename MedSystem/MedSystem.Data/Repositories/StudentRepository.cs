@@ -129,6 +129,59 @@ public static class StudentRepository
         return ReadStudent(reader);
     }
 
+    public static List<string> FindDuplicates(Student student)
+    {
+        using var conn = Db.Open();
+        using var cmd = conn.CreateCommand();
+        cmd.CommandText = """
+            SELECT last_name, first_name, middle_name, birth_date, oms,
+                   archived_at, deleted_at
+            FROM students
+            WHERE id <> $id
+              AND (
+                  ($oms <> '' AND equals_ci(oms, $oms))
+                  OR ($birthDate <> '' AND birth_date = $birthDate
+                      AND equals_ci(last_name, $lastName)
+                      AND equals_ci(first_name, $firstName)
+                      AND equals_ci(middle_name, $middleName))
+              )
+            ORDER BY deleted_at IS NOT NULL, archived_at IS NOT NULL, last_name, first_name
+            LIMIT 10
+            """;
+        cmd.Parameters.AddWithValue("$id", student.Id);
+        cmd.Parameters.AddWithValue("$oms", student.Oms);
+        cmd.Parameters.AddWithValue("$birthDate", student.BirthDate);
+        cmd.Parameters.AddWithValue("$lastName", student.LastName);
+        cmd.Parameters.AddWithValue("$firstName", student.FirstName);
+        cmd.Parameters.AddWithValue("$middleName", student.MiddleName);
+
+        using var reader = cmd.ExecuteReader();
+        var result = new List<string>();
+        while (reader.Read())
+        {
+            var reasons = new List<string>(2);
+            if (!string.IsNullOrEmpty(student.Oms)
+                && string.Equals(reader.GetString(4), student.Oms, StringComparison.OrdinalIgnoreCase))
+                reasons.Add("совпадает ОМС");
+            if (!string.IsNullOrEmpty(student.BirthDate)
+                && reader.GetString(3) == student.BirthDate
+                && string.Equals(reader.GetString(0), student.LastName, StringComparison.OrdinalIgnoreCase)
+                && string.Equals(reader.GetString(1), student.FirstName, StringComparison.OrdinalIgnoreCase)
+                && string.Equals(reader.GetString(2), student.MiddleName, StringComparison.OrdinalIgnoreCase))
+                reasons.Add("совпадают ФИО и дата рождения");
+
+            var fullName = string.Join(' ', new[]
+            {
+                reader.GetString(0), reader.GetString(1), reader.GetString(2),
+            }.Where(part => !string.IsNullOrWhiteSpace(part)));
+            var status = !reader.IsDBNull(6)
+                ? "в корзине"
+                : !reader.IsDBNull(5) ? "в архиве" : "активная запись";
+            result.Add($"{fullName}, {reader.GetString(3)} — {string.Join(", ", reasons)} ({status})");
+        }
+        return result;
+    }
+
     public static void Insert(Student s)
     {
         using var conn = Db.Open();

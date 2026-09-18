@@ -28,6 +28,11 @@ public static class Db
             (value, query) => !string.IsNullOrEmpty(value)
                 && !string.IsNullOrEmpty(query)
                 && value.Contains(query, StringComparison.OrdinalIgnoreCase));
+        conn.CreateFunction<string?, string?, bool>(
+            "equals_ci",
+            (left, right) => left is not null
+                && right is not null
+                && string.Equals(left, right, StringComparison.OrdinalIgnoreCase));
         conn.CreateFunction<string?, string?, string?, int>(
             "person_status",
             (sanminimum, medicalExam, fluorography) =>

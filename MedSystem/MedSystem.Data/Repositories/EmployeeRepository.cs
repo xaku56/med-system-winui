@@ -100,6 +100,69 @@ public static class EmployeeRepository
         return reader.Read() ? Map(reader) : null;
     }
 
+    public static List<string> FindDuplicates(Employee employee)
+    {
+        using var conn = Db.Open();
+        using var cmd = conn.CreateCommand();
+        cmd.CommandText = """
+            SELECT last_name, first_name, middle_name, birth_date, oms,
+                   passport_series, passport_number, archived_at, deleted_at
+            FROM employees
+            WHERE id <> $id
+              AND (
+                  ($oms <> '' AND equals_ci(oms, $oms))
+                  OR ($passportSeries <> '' AND $passportNumber <> ''
+                      AND equals_ci(passport_series, $passportSeries)
+                      AND equals_ci(passport_number, $passportNumber))
+                  OR ($birthDate <> '' AND birth_date = $birthDate
+                      AND equals_ci(last_name, $lastName)
+                      AND equals_ci(first_name, $firstName)
+                      AND equals_ci(middle_name, $middleName))
+              )
+            ORDER BY deleted_at IS NOT NULL, archived_at IS NOT NULL, last_name, first_name
+            LIMIT 10
+            """;
+        cmd.Parameters.AddWithValue("$id", employee.Id);
+        cmd.Parameters.AddWithValue("$oms", employee.Oms);
+        cmd.Parameters.AddWithValue("$passportSeries", employee.PassportSeries);
+        cmd.Parameters.AddWithValue("$passportNumber", employee.PassportNumber);
+        cmd.Parameters.AddWithValue("$birthDate", employee.BirthDate);
+        cmd.Parameters.AddWithValue("$lastName", employee.LastName);
+        cmd.Parameters.AddWithValue("$firstName", employee.FirstName);
+        cmd.Parameters.AddWithValue("$middleName", employee.MiddleName);
+
+        using var reader = cmd.ExecuteReader();
+        var result = new List<string>();
+        while (reader.Read())
+        {
+            var reasons = new List<string>(3);
+            if (!string.IsNullOrEmpty(employee.Oms)
+                && string.Equals(reader.GetString(4), employee.Oms, StringComparison.OrdinalIgnoreCase))
+                reasons.Add("совпадает ОМС");
+            if (!string.IsNullOrEmpty(employee.PassportSeries)
+                && !string.IsNullOrEmpty(employee.PassportNumber)
+                && string.Equals(reader.GetString(5), employee.PassportSeries, StringComparison.OrdinalIgnoreCase)
+                && string.Equals(reader.GetString(6), employee.PassportNumber, StringComparison.OrdinalIgnoreCase))
+                reasons.Add("совпадает паспорт");
+            if (!string.IsNullOrEmpty(employee.BirthDate)
+                && reader.GetString(3) == employee.BirthDate
+                && string.Equals(reader.GetString(0), employee.LastName, StringComparison.OrdinalIgnoreCase)
+                && string.Equals(reader.GetString(1), employee.FirstName, StringComparison.OrdinalIgnoreCase)
+                && string.Equals(reader.GetString(2), employee.MiddleName, StringComparison.OrdinalIgnoreCase))
+                reasons.Add("совпадают ФИО и дата рождения");
+
+            var fullName = string.Join(' ', new[]
+            {
+                reader.GetString(0), reader.GetString(1), reader.GetString(2),
+            }.Where(part => !string.IsNullOrWhiteSpace(part)));
+            var status = !reader.IsDBNull(8)
+                ? "в корзине"
+                : !reader.IsDBNull(7) ? "в архиве" : "активная запись";
+            result.Add($"{fullName}, {reader.GetString(3)} — {string.Join(", ", reasons)} ({status})");
+        }
+        return result;
+    }
+
     public static void Insert(Employee e)
     {
         using var conn = Db.Open();
