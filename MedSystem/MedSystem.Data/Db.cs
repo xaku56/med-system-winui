@@ -1,4 +1,5 @@
 using Microsoft.Data.Sqlite;
+using MedSystem.Core;
 
 namespace MedSystem.Data;
 
@@ -22,6 +23,19 @@ public static class Db
     public static SqliteConnection Open()
     {
         var conn = new SqliteConnection($"Data Source={DbPath};Foreign Keys=True");
+        conn.CreateFunction<string?, string?, bool>(
+            "contains_ci",
+            (value, query) => !string.IsNullOrEmpty(value)
+                && !string.IsNullOrEmpty(query)
+                && value.Contains(query, StringComparison.OrdinalIgnoreCase));
+        conn.CreateFunction<string?, string?, string?, int>(
+            "student_status",
+            (sanminimum, medicalExam, fluorography) =>
+            {
+                var (isExpired, isExpiring) = ExpirationRules.GetPersonStatus(
+                    new[] { sanminimum ?? "", medicalExam ?? "", fluorography ?? "" });
+                return (isExpired ? 1 : 0) | (isExpiring ? 2 : 0);
+            });
         conn.Open();
         return conn;
     }

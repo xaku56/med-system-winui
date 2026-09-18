@@ -2,6 +2,24 @@ using MedSystem.Core.Models;
 
 namespace MedSystem.Data.Repositories;
 
+public sealed class StudentPageRequest
+{
+    public string SearchText { get; init; } = "";
+    public long GroupId { get; init; }
+    public string GroupSearchText { get; init; } = "";
+    public int StatusFilter { get; init; }
+    public bool Archived { get; init; }
+    public int Page { get; init; } = 1;
+    public int PageSize { get; init; } = 100;
+}
+
+public sealed class StudentPageResult
+{
+    public required List<Student> Items { get; init; }
+    public long TotalCount { get; init; }
+    public int Page { get; init; }
+}
+
 public static class StudentRepository
 {
     public static long Count()
@@ -12,10 +30,60 @@ public static class StudentRepository
         return Convert.ToInt64(cmd.ExecuteScalar());
     }
 
-    public static List<Student> GetAll(bool archived = false)
+    public static StudentPageResult GetPage(StudentPageRequest request)
     {
+        var pageSize = Math.Clamp(request.PageSize, 1, 200);
+        var requestedPage = Math.Max(request.Page, 1);
+        var where = new List<string>
+        {
+            "s.deleted_at IS NULL",
+            request.Archived ? "s.archived_at IS NOT NULL" : "s.archived_at IS NULL",
+        };
+
         using var conn = Db.Open();
         using var cmd = conn.CreateCommand();
+
+        var search = request.SearchText.Trim();
+        if (search.Length > 0)
+        {
+            where.Add("(contains_ci(s.last_name || ' ' || s.first_name || ' ' || s.middle_name, $search) OR contains_ci(s.oms, $search))");
+            cmd.Parameters.AddWithValue("$search", search);
+        }
+
+        if (request.GroupId > 0)
+        {
+            where.Add("s.group_id = $groupId");
+            cmd.Parameters.AddWithValue("$groupId", request.GroupId);
+        }
+        else if (request.GroupId == -1)
+        {
+            where.Add("s.group_id IS NULL");
+        }
+        else
+        {
+            var groupSearch = request.GroupSearchText.Trim();
+            if (groupSearch.Length > 0)
+            {
+                where.Add("contains_ci(g.name, $groupSearch)");
+                cmd.Parameters.AddWithValue("$groupSearch", groupSearch);
+            }
+        }
+
+        if (request.StatusFilter is 1 or 2)
+        {
+            var statusFlag = request.StatusFilter == 1 ? 1 : 2;
+            where.Add("(student_status(s.sanminimum_date, s.medical_exam_date, s.fluorography_date) & $statusFlag) <> 0");
+            cmd.Parameters.AddWithValue("$statusFlag", statusFlag);
+        }
+
+        var whereSql = string.Join(" AND ", where);
+        cmd.CommandText = $"SELECT COUNT(*) FROM students s LEFT JOIN groups g ON s.group_id = g.id WHERE {whereSql}";
+        var totalCount = Convert.ToInt64(cmd.ExecuteScalar());
+        var totalPages = Math.Max(1, (int)Math.Ceiling(totalCount / (double)pageSize));
+        var page = Math.Min(requestedPage, totalPages);
+
+        cmd.Parameters.AddWithValue("$limit", pageSize);
+        cmd.Parameters.AddWithValue("$offset", (page - 1) * pageSize);
         cmd.CommandText = $"""
             SELECT s.id, s.group_id, g.name, s.last_name, s.first_name, s.middle_name,
                    s.birth_date, s.oms, s.address,
@@ -23,33 +91,22 @@ public static class StudentRepository
                    s.health_group, s.archive_reason
             FROM students s
             LEFT JOIN groups g ON s.group_id = g.id
-            WHERE s.deleted_at IS NULL
-              AND s.archived_at IS {(archived ? "NOT NULL" : "NULL")}
-            ORDER BY s.last_name, s.first_name, s.middle_name
+            WHERE {whereSql}
+            ORDER BY s.last_name, s.first_name, s.middle_name, s.id
+            LIMIT $limit OFFSET $offset
             """;
+
         using var reader = cmd.ExecuteReader();
-        var result = new List<Student>();
+        var items = new List<Student>(pageSize);
         while (reader.Read())
+            items.Add(ReadStudent(reader));
+
+        return new StudentPageResult
         {
-            result.Add(new Student
-            {
-                Id = reader.GetInt64(0),
-                GroupId = reader.IsDBNull(1) ? 0 : reader.GetInt64(1),
-                GroupName = reader.IsDBNull(2) ? "" : reader.GetString(2),
-                LastName = reader.GetString(3),
-                FirstName = reader.GetString(4),
-                MiddleName = reader.GetString(5),
-                BirthDate = reader.GetString(6),
-                Oms = reader.GetString(7),
-                Address = reader.GetString(8),
-                SanminimumDate = reader.GetString(9),
-                MedicalExamDate = reader.GetString(10),
-                FluorographyDate = reader.GetString(11),
-                HealthGroup = reader.GetString(12),
-                ArchiveReason = reader.IsDBNull(13) ? "" : reader.GetString(13),
-            });
-        }
-        return result;
+            Items = items,
+            TotalCount = totalCount,
+            Page = page,
+        };
     }
 
     public static Student? GetById(long id)
@@ -69,23 +126,7 @@ public static class StudentRepository
         using var reader = cmd.ExecuteReader();
         if (!reader.Read())
             return null;
-        return new Student
-        {
-            Id = reader.GetInt64(0),
-            GroupId = reader.IsDBNull(1) ? 0 : reader.GetInt64(1),
-            GroupName = reader.IsDBNull(2) ? "" : reader.GetString(2),
-            LastName = reader.GetString(3),
-            FirstName = reader.GetString(4),
-            MiddleName = reader.GetString(5),
-            BirthDate = reader.GetString(6),
-            Oms = reader.GetString(7),
-            Address = reader.GetString(8),
-            SanminimumDate = reader.GetString(9),
-            MedicalExamDate = reader.GetString(10),
-            FluorographyDate = reader.GetString(11),
-            HealthGroup = reader.GetString(12),
-            ArchiveReason = reader.IsDBNull(13) ? "" : reader.GetString(13),
-        };
+        return ReadStudent(reader);
     }
 
     public static void Insert(Student s)
@@ -183,4 +224,22 @@ public static class StudentRepository
         cmd.Parameters.AddWithValue("$fluorographyDate", s.FluorographyDate);
         cmd.Parameters.AddWithValue("$healthGroup", s.HealthGroup);
     }
+
+    private static Student ReadStudent(Microsoft.Data.Sqlite.SqliteDataReader reader) => new()
+    {
+        Id = reader.GetInt64(0),
+        GroupId = reader.IsDBNull(1) ? 0 : reader.GetInt64(1),
+        GroupName = reader.IsDBNull(2) ? "" : reader.GetString(2),
+        LastName = reader.GetString(3),
+        FirstName = reader.GetString(4),
+        MiddleName = reader.GetString(5),
+        BirthDate = reader.GetString(6),
+        Oms = reader.GetString(7),
+        Address = reader.GetString(8),
+        SanminimumDate = reader.GetString(9),
+        MedicalExamDate = reader.GetString(10),
+        FluorographyDate = reader.GetString(11),
+        HealthGroup = reader.GetString(12),
+        ArchiveReason = reader.IsDBNull(13) ? "" : reader.GetString(13),
+    };
 }

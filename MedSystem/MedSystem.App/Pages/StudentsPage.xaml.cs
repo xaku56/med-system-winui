@@ -2,6 +2,8 @@ using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Linq;
+using System.Threading;
+using System.Threading.Tasks;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Input;
@@ -42,10 +44,15 @@ namespace MedSystem.App.Pages
 
     public sealed partial class StudentsPage : Page
     {
-        private List<StudentRow> _allRows = new();
+        private const int PageSize = 100;
+
         private List<Group> _groupOptions = new();
         private long _selectedGroupId;
-        private bool _suppressLifecycleChange;
+        private long _totalCount;
+        private int _page = 1;
+        private bool _suppressFilterChange;
+        private bool _isPageActive;
+        private CancellationTokenSource? _loadCancellation;
         public ObservableCollection<StudentRow> Rows { get; } = new();
 
         public StudentsPage()
@@ -60,16 +67,25 @@ namespace MedSystem.App.Pages
         protected override void OnNavigatedTo(NavigationEventArgs e)
         {
             base.OnNavigatedTo(e);
+            _isPageActive = true;
+            _suppressFilterChange = true;
             long? requestedGroupId = e.Parameter is long groupId ? groupId : null;
             if (e.Parameter is StudentsPageParameters parameters)
             {
-                _suppressLifecycleChange = true;
                 LifecycleBox.SelectedIndex = parameters.ShowArchived ? 1 : 0;
-                _suppressLifecycleChange = false;
                 requestedGroupId = parameters.GroupId;
             }
             LoadGroupFilter(requestedGroupId);
-            LoadData();
+            _suppressFilterChange = false;
+            _page = 1;
+            _ = LoadDataAsync();
+        }
+
+        protected override void OnNavigatedFrom(NavigationEventArgs e)
+        {
+            _isPageActive = false;
+            _loadCancellation?.Cancel();
+            base.OnNavigatedFrom(e);
         }
 
         private void LoadGroupFilter(long? requestedGroupId)
@@ -85,88 +101,137 @@ namespace MedSystem.App.Pages
                 UpdateGroupSuggestions(GroupFilterBox.Text);
         }
 
-        private void LoadData()
+        private async Task LoadDataAsync(bool debounce = false)
         {
-            var dark = ActualTheme == Microsoft.UI.Xaml.ElementTheme.Dark;
-            var showArchived = LifecycleBox.SelectedIndex == 1;
-            _allRows = StudentRepository.GetAll(archived: showArchived).Select(s =>
-            {
-                var sanStatus = ExpirationRules.GetSingleCheckupStatus(s.SanminimumDate);
-                var medStatus = ExpirationRules.GetSingleCheckupStatus(s.MedicalExamDate);
-                var fluStatus = ExpirationRules.GetSingleCheckupStatus(s.FluorographyDate);
-                var (sanBg, sanFg) = Badges.For(sanStatus.IsExpired, sanStatus.IsExpiring, dark);
-                var (medBg, medFg) = Badges.For(medStatus.IsExpired, medStatus.IsExpiring, dark);
-                var (fluBg, fluFg) = Badges.For(fluStatus.IsExpired, fluStatus.IsExpiring, dark);
-                var (isExpired, isExpiring) = ExpirationRules.GetPersonStatus(
-                    new[] { s.SanminimumDate, s.MedicalExamDate, s.FluorographyDate });
-                return new StudentRow
-                {
-                    Id = s.Id,
-                    GroupId = s.GroupId,
-                    FullName = s.FullName,
-                    GroupName = s.GroupName,
-                    ArchiveReason = string.IsNullOrWhiteSpace(s.ArchiveReason)
-                        ? "Причина не указана"
-                        : $"Причина: {s.ArchiveReason}",
-                    Sanminimum = s.SanminimumDate,
-                    MedicalExam = s.MedicalExamDate,
-                    Fluorography = s.FluorographyDate,
-                    IsExpired = isExpired,
-                    IsExpiring = isExpiring,
-                    ArchiveVisibility = showArchived ? Visibility.Collapsed : Visibility.Visible,
-                    RestoreVisibility = showArchived ? Visibility.Visible : Visibility.Collapsed,
-                    SanminimumBg = sanBg, SanminimumFg = sanFg,
-                    MedicalExamBg = medBg, MedicalExamFg = medFg,
-                    FluorographyBg = fluBg, FluorographyFg = fluFg,
-                };
-            }).ToList();
-            AddButton.IsEnabled = !showArchived;
-            ApplyFilter();
-        }
-
-        private void ApplyFilter()
-        {
-            if (SearchBox == null || GroupFilterBox == null || FilterBox == null)
+            if (!_isPageActive || SearchBox == null)
                 return;
 
-            var query = SearchBox.Text?.Trim().ToLowerInvariant() ?? "";
-            IEnumerable<StudentRow> filtered = _allRows;
+            _loadCancellation?.Cancel();
+            var cancellation = new CancellationTokenSource();
+            _loadCancellation = cancellation;
 
-            if (!string.IsNullOrEmpty(query))
-                filtered = filtered.Where(r => r.FullName.ToLowerInvariant().Contains(query));
-
-            if (_selectedGroupId > 0)
+            try
             {
-                filtered = filtered.Where(r => r.GroupId == _selectedGroupId);
+                if (debounce)
+                    await Task.Delay(300, cancellation.Token);
+
+                SetLoading(true);
+                ErrorBar.IsOpen = false;
+                var request = new StudentPageRequest
+                {
+                    SearchText = SearchBox.Text ?? "",
+                    GroupId = _selectedGroupId,
+                    GroupSearchText = _selectedGroupId == 0 ? GroupFilterBox.Text ?? "" : "",
+                    StatusFilter = FilterBox.SelectedIndex,
+                    Archived = LifecycleBox.SelectedIndex == 1,
+                    Page = _page,
+                    PageSize = PageSize,
+                };
+                var result = await Task.Run(
+                    () => StudentRepository.GetPage(request), cancellation.Token);
+                cancellation.Token.ThrowIfCancellationRequested();
+
+                _page = result.Page;
+                _totalCount = result.TotalCount;
+                var showArchived = request.Archived;
+                var dark = ActualTheme == Microsoft.UI.Xaml.ElementTheme.Dark;
+                Rows.Clear();
+                foreach (var student in result.Items)
+                    Rows.Add(CreateRow(student, showArchived, dark));
+
+                AddButton.IsEnabled = !showArchived;
+                UpdatePagination();
             }
-            else if (_selectedGroupId == -1)
+            catch (OperationCanceledException)
             {
-                filtered = filtered.Where(r => r.GroupId == 0);
+                // Новый запрос заменил устаревший результат.
+            }
+            catch (Exception ex)
+            {
+                ErrorBar.Message = $"Не удалось загрузить студентов. {ex.Message}";
+                ErrorBar.IsOpen = true;
+            }
+            finally
+            {
+                if (ReferenceEquals(_loadCancellation, cancellation))
+                {
+                    _loadCancellation = null;
+                    SetLoading(false);
+                }
+                cancellation.Dispose();
+            }
+        }
+
+        private static StudentRow CreateRow(Student s, bool showArchived, bool dark)
+        {
+            var sanStatus = ExpirationRules.GetSingleCheckupStatus(s.SanminimumDate);
+            var medStatus = ExpirationRules.GetSingleCheckupStatus(s.MedicalExamDate);
+            var fluStatus = ExpirationRules.GetSingleCheckupStatus(s.FluorographyDate);
+            var (sanBg, sanFg) = Badges.For(sanStatus.IsExpired, sanStatus.IsExpiring, dark);
+            var (medBg, medFg) = Badges.For(medStatus.IsExpired, medStatus.IsExpiring, dark);
+            var (fluBg, fluFg) = Badges.For(fluStatus.IsExpired, fluStatus.IsExpiring, dark);
+            var (isExpired, isExpiring) = ExpirationRules.GetPersonStatus(
+                new[] { s.SanminimumDate, s.MedicalExamDate, s.FluorographyDate });
+            return new StudentRow
+            {
+                Id = s.Id,
+                GroupId = s.GroupId,
+                FullName = s.FullName,
+                GroupName = s.GroupName,
+                ArchiveReason = string.IsNullOrWhiteSpace(s.ArchiveReason)
+                    ? "Причина не указана"
+                    : $"Причина: {s.ArchiveReason}",
+                Sanminimum = s.SanminimumDate,
+                MedicalExam = s.MedicalExamDate,
+                Fluorography = s.FluorographyDate,
+                IsExpired = isExpired,
+                IsExpiring = isExpiring,
+                ArchiveVisibility = showArchived ? Visibility.Collapsed : Visibility.Visible,
+                RestoreVisibility = showArchived ? Visibility.Visible : Visibility.Collapsed,
+                SanminimumBg = sanBg,
+                SanminimumFg = sanFg,
+                MedicalExamBg = medBg,
+                MedicalExamFg = medFg,
+                FluorographyBg = fluBg,
+                FluorographyFg = fluFg,
+            };
+        }
+
+        private void SetLoading(bool isLoading)
+        {
+            LoadingRing.IsActive = isLoading;
+            LoadingRing.Visibility = isLoading ? Visibility.Visible : Visibility.Collapsed;
+            if (isLoading)
+            {
+                PreviousPageButton.IsEnabled = false;
+                NextPageButton.IsEnabled = false;
             }
             else
             {
-                var groupQuery = GroupFilterBox.Text?.Trim();
-                if (!string.IsNullOrEmpty(groupQuery))
-                    filtered = filtered.Where(r =>
-                        r.GroupName.Contains(groupQuery, StringComparison.OrdinalIgnoreCase));
+                UpdatePagination();
             }
-
-            filtered = FilterBox.SelectedIndex switch
-            {
-                1 => filtered.Where(r => r.IsExpired),
-                2 => filtered.Where(r => r.IsExpiring),
-                _ => filtered,
-            };
-
-            var list = filtered.ToList();
-            Rows.Clear();
-            foreach (var row in list)
-                Rows.Add(row);
-
-            CountText.Text = $"Всего: {list.Count}";
         }
 
-        private void SearchBox_TextChanged(object sender, TextChangedEventArgs e) => ApplyFilter();
+        private void UpdatePagination()
+        {
+            var totalPages = Math.Max(1, (int)Math.Ceiling(_totalCount / (double)PageSize));
+            var first = _totalCount == 0 ? 0 : (_page - 1) * PageSize + 1;
+            var last = Math.Min((long)_page * PageSize, _totalCount);
+            CountText.Text = $"Найдено: {_totalCount}";
+            PageText.Text = _totalCount == 0
+                ? "Нет записей"
+                : $"{first}–{last} из {_totalCount} · страница {_page} из {totalPages}";
+            PreviousPageButton.IsEnabled = _page > 1;
+            NextPageButton.IsEnabled = _page < totalPages;
+        }
+
+        private void SearchBox_TextChanged(object sender, TextChangedEventArgs e)
+        {
+            if (_suppressFilterChange || !_isPageActive)
+                return;
+            _page = 1;
+            _ = LoadDataAsync(debounce: true);
+        }
 
         private void GroupFilterBox_TextChanged(AutoSuggestBox sender, AutoSuggestBoxTextChangedEventArgs args)
         {
@@ -175,7 +240,8 @@ namespace MedSystem.App.Pages
 
             _selectedGroupId = 0;
             UpdateGroupSuggestions(sender.Text);
-            ApplyFilter();
+            _page = 1;
+            _ = LoadDataAsync(debounce: true);
         }
 
         private void GroupFilterBox_SuggestionChosen(
@@ -199,7 +265,10 @@ namespace MedSystem.App.Pages
             if (exactMatch != null)
                 SelectGroup(exactMatch.Id);
             else
-                ApplyFilter();
+            {
+                _page = 1;
+                _ = LoadDataAsync();
+            }
         }
 
         private void UpdateGroupSuggestions(string? query)
@@ -217,20 +286,50 @@ namespace MedSystem.App.Pages
             _selectedGroupId = group?.Id ?? 0;
             GroupFilterBox.Text = group?.Name ?? "";
             GroupFilterBox.ItemsSource = null;
-            ApplyFilter();
+            if (!_suppressFilterChange && _isPageActive)
+            {
+                _page = 1;
+                _ = LoadDataAsync();
+            }
         }
 
-        private void FilterBox_SelectionChanged(object sender, SelectionChangedEventArgs e) => ApplyFilter();
+        private void FilterBox_SelectionChanged(object sender, SelectionChangedEventArgs e)
+        {
+            if (_suppressFilterChange || !_isPageActive)
+                return;
+            _page = 1;
+            _ = LoadDataAsync();
+        }
 
         private void LifecycleBox_SelectionChanged(object sender, SelectionChangedEventArgs e)
         {
-            if (_suppressLifecycleChange || GroupFilterBox == null)
+            if (_suppressFilterChange || GroupFilterBox == null || !_isPageActive)
                 return;
 
+            _suppressFilterChange = true;
             _selectedGroupId = 0;
             GroupFilterBox.Text = "";
             LoadGroupFilter(null);
-            LoadData();
+            _suppressFilterChange = false;
+            _page = 1;
+            _ = LoadDataAsync();
+        }
+
+        private async void PreviousPageButton_Click(object sender, RoutedEventArgs e)
+        {
+            if (_page <= 1)
+                return;
+            _page--;
+            await LoadDataAsync();
+        }
+
+        private async void NextPageButton_Click(object sender, RoutedEventArgs e)
+        {
+            var totalPages = Math.Max(1, (int)Math.Ceiling(_totalCount / (double)PageSize));
+            if (_page >= totalPages)
+                return;
+            _page++;
+            await LoadDataAsync();
         }
 
         // ── Действия ─────────────────────────────────────────────────
@@ -278,16 +377,16 @@ namespace MedSystem.App.Pages
             if (await dialog.ShowAsync() == ContentDialogResult.Primary)
             {
                 StudentRepository.Archive(id, reasonBox.SelectedItem?.ToString() ?? "Другое");
-                LoadData();
+                await LoadDataAsync();
             }
         }
 
-        private void RestoreArchiveMenuItem_Click(object sender, RoutedEventArgs e)
+        private async void RestoreArchiveMenuItem_Click(object sender, RoutedEventArgs e)
         {
             if (sender is FrameworkElement { Tag: long id })
             {
                 StudentRepository.RestoreFromArchive(id);
-                LoadData();
+                await LoadDataAsync();
             }
         }
 
@@ -296,7 +395,7 @@ namespace MedSystem.App.Pages
             if (sender is not FrameworkElement { Tag: long id })
                 return;
 
-            var row = _allRows.FirstOrDefault(r => r.Id == id);
+            var row = Rows.FirstOrDefault(r => r.Id == id);
             var dialog = new ContentDialog
             {
                 Title = "Перемещение в корзину",
@@ -311,7 +410,7 @@ namespace MedSystem.App.Pages
             if (await dialog.ShowAsync() == ContentDialogResult.Primary)
             {
                 StudentRepository.MoveToTrash(id);
-                LoadData();
+                await LoadDataAsync();
             }
         }
     }
