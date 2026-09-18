@@ -19,6 +19,7 @@ namespace MedSystem.App.Pages
     {
         private long _appealId;
         private CancellationTokenSource? _personSearchCancellation;
+        private CancellationTokenSource? _diagnosisSearchCancellation;
 
         public AppealFormPage()
         {
@@ -47,6 +48,7 @@ namespace MedSystem.App.Pages
         protected override void OnNavigatedFrom(NavigationEventArgs e)
         {
             _personSearchCancellation?.Cancel();
+            _diagnosisSearchCancellation?.Cancel();
             base.OnNavigatedFrom(e);
         }
 
@@ -146,15 +148,53 @@ namespace MedSystem.App.Pages
 
         // ── Автодополнение диагноза по МКБ ───────────────────────────
 
-        private void DiagnosisBox_TextChanged(AutoSuggestBox sender, AutoSuggestBoxTextChangedEventArgs args)
+        private async void DiagnosisBox_TextChanged(
+            AutoSuggestBox sender,
+            AutoSuggestBoxTextChangedEventArgs args)
         {
             if (args.Reason != AutoSuggestionBoxTextChangeReason.UserInput)
                 return;
 
+            _diagnosisSearchCancellation?.Cancel();
             var query = sender.Text.Trim();
-            sender.ItemsSource = string.IsNullOrEmpty(query)
-                ? null
-                : IcdRepository.Search(query).Select(c => $"{c.Code} - {c.Name}").ToList();
+            if (query.Length == 0)
+            {
+                sender.ItemsSource = null;
+                DiagnosisSearchRing.IsActive = false;
+                DiagnosisSearchRing.Visibility = Visibility.Collapsed;
+                return;
+            }
+
+            var cancellation = new CancellationTokenSource();
+            _diagnosisSearchCancellation = cancellation;
+            try
+            {
+                await Task.Delay(250, cancellation.Token);
+                DiagnosisSearchRing.IsActive = true;
+                DiagnosisSearchRing.Visibility = Visibility.Visible;
+                var codes = await Task.Run(
+                    () => IcdRepository.Search(query), cancellation.Token);
+                cancellation.Token.ThrowIfCancellationRequested();
+                sender.ItemsSource = codes.Select(c => $"{c.Code} - {c.Name}").ToList();
+            }
+            catch (OperationCanceledException)
+            {
+                // Продолжаем только с последней введённой строкой.
+            }
+            catch
+            {
+                sender.ItemsSource = null;
+            }
+            finally
+            {
+                if (ReferenceEquals(_diagnosisSearchCancellation, cancellation))
+                {
+                    _diagnosisSearchCancellation = null;
+                    DiagnosisSearchRing.IsActive = false;
+                    DiagnosisSearchRing.Visibility = Visibility.Collapsed;
+                }
+                cancellation.Dispose();
+            }
         }
 
         // ── Сохранение ───────────────────────────────────────────────

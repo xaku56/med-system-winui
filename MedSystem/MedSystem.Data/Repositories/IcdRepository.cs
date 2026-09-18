@@ -2,37 +2,76 @@ using MedSystem.Core.Models;
 
 namespace MedSystem.Data.Repositories;
 
+public sealed class IcdPageResult
+{
+    public required List<IcdCode> Items { get; init; }
+    public long TotalCount { get; init; }
+    public int Page { get; init; }
+}
+
 public static class IcdRepository
 {
-    /// <summary>
-    /// Поиск по коду или названию (без учёта регистра, включая кириллицу).
-    /// Фильтрация выполняется в C#, т.к. встроенный LOWER SQLite
-    /// не работает с кириллицей.
-    /// </summary>
     public static List<IcdCode> Search(string query, int limit = 30)
     {
-        var all = GetAll();
         if (string.IsNullOrWhiteSpace(query))
-            return all.Take(limit).ToList();
+            return new List<IcdCode>();
 
-        var q = query.Trim().ToLowerInvariant();
-        return all
-            .Where(c => c.Code.ToLowerInvariant().Contains(q)
-                     || c.Name.ToLowerInvariant().Contains(q))
-            .Take(limit)
-            .ToList();
-    }
-
-    public static List<IcdCode> GetAll()
-    {
+        limit = Math.Clamp(limit, 1, 100);
         using var conn = Db.Open();
         using var cmd = conn.CreateCommand();
-        cmd.CommandText = "SELECT code, name FROM icd_codes ORDER BY code";
+        cmd.CommandText = """
+            SELECT code, name FROM icd_codes
+            WHERE contains_ci(code, $query) OR contains_ci(name, $query)
+            ORDER BY code
+            LIMIT $limit
+            """;
+        cmd.Parameters.AddWithValue("$query", query.Trim());
+        cmd.Parameters.AddWithValue("$limit", limit);
         using var reader = cmd.ExecuteReader();
-        var result = new List<IcdCode>();
+        var result = new List<IcdCode>(limit);
         while (reader.Read())
-            result.Add(new IcdCode { Code = reader.GetString(0), Name = reader.GetString(1) });
+            result.Add(Map(reader));
         return result;
+    }
+
+    public static IcdPageResult GetPage(string searchText, int page, int pageSize)
+    {
+        pageSize = Math.Clamp(pageSize, 1, 200);
+        page = Math.Max(page, 1);
+        using var conn = Db.Open();
+        using var cmd = conn.CreateCommand();
+
+        var query = searchText.Trim();
+        var where = "";
+        if (query.Length > 0)
+        {
+            where = "WHERE contains_ci(code, $query) OR contains_ci(name, $query)";
+            cmd.Parameters.AddWithValue("$query", query);
+        }
+
+        cmd.CommandText = $"SELECT COUNT(*) FROM icd_codes {where}";
+        var totalCount = Convert.ToInt64(cmd.ExecuteScalar());
+        var totalPages = Math.Max(1, (int)Math.Ceiling(totalCount / (double)pageSize));
+        page = Math.Min(page, totalPages);
+
+        cmd.Parameters.AddWithValue("$limit", pageSize);
+        cmd.Parameters.AddWithValue("$offset", (page - 1) * pageSize);
+        cmd.CommandText = $"""
+            SELECT code, name FROM icd_codes
+            {where}
+            ORDER BY code
+            LIMIT $limit OFFSET $offset
+            """;
+        using var reader = cmd.ExecuteReader();
+        var items = new List<IcdCode>(pageSize);
+        while (reader.Read())
+            items.Add(Map(reader));
+        return new IcdPageResult
+        {
+            Items = items,
+            TotalCount = totalCount,
+            Page = page,
+        };
     }
 
     /// <summary>Возвращает false, если код уже существует.</summary>
@@ -90,4 +129,10 @@ public static class IcdRepository
         cmd.Parameters.AddWithValue("$code", code);
         cmd.ExecuteNonQuery();
     }
+
+    private static IcdCode Map(Microsoft.Data.Sqlite.SqliteDataReader reader) => new()
+    {
+        Code = reader.GetString(0),
+        Name = reader.GetString(1),
+    };
 }

@@ -1,12 +1,13 @@
 using System;
-using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Linq;
+using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Input;
 using Microsoft.UI.Xaml.Navigation;
+using MedSystem.Core.Models;
 using MedSystem.Data.Repositories;
 
 namespace MedSystem.App.Pages
@@ -20,7 +21,12 @@ namespace MedSystem.App.Pages
     /// <summary>Справочник кодов МКБ: просмотр, добавление, изменение, удаление.</summary>
     public sealed partial class IcdReferencePage : Page
     {
-        private List<IcdRow> _allRows = new();
+        private const int PageSize = 100;
+
+        private long _totalCount;
+        private int _page = 1;
+        private bool _isPageActive;
+        private CancellationTokenSource? _loadCancellation;
         public ObservableCollection<IcdRow> Rows { get; } = new();
 
         public IcdReferencePage()
@@ -35,33 +41,126 @@ namespace MedSystem.App.Pages
         protected override void OnNavigatedTo(NavigationEventArgs e)
         {
             base.OnNavigatedTo(e);
-            LoadData();
+            _isPageActive = true;
+            _page = 1;
+            _ = LoadDataAsync();
         }
 
-        private void LoadData()
+        protected override void OnNavigatedFrom(NavigationEventArgs e)
         {
-            _allRows = IcdRepository.GetAll()
-                .Select(c => new IcdRow { Code = c.Code, Name = c.Name })
-                .ToList();
-            ApplyFilter();
+            _isPageActive = false;
+            _loadCancellation?.Cancel();
+            base.OnNavigatedFrom(e);
         }
 
-        private void ApplyFilter()
+        private async Task LoadDataAsync(bool debounce = false)
         {
-            var query = SearchBox.Text?.Trim().ToLowerInvariant() ?? "";
-            var filtered = string.IsNullOrEmpty(query)
-                ? _allRows
-                : _allRows.Where(r => r.Code.ToLowerInvariant().Contains(query)
-                                   || r.Name.ToLowerInvariant().Contains(query)).ToList();
+            if (!_isPageActive || SearchBox == null)
+                return;
 
-            Rows.Clear();
-            foreach (var row in filtered)
-                Rows.Add(row);
+            _loadCancellation?.Cancel();
+            var cancellation = new CancellationTokenSource();
+            _loadCancellation = cancellation;
 
-            CountText.Text = $"Всего: {filtered.Count}";
+            try
+            {
+                if (debounce)
+                    await Task.Delay(300, cancellation.Token);
+
+                SetLoading(true);
+                ErrorBar.IsOpen = false;
+                var searchText = SearchBox.Text ?? "";
+                var requestedPage = _page;
+                var result = await Task.Run(
+                    () => IcdRepository.GetPage(searchText, requestedPage, PageSize),
+                    cancellation.Token);
+                cancellation.Token.ThrowIfCancellationRequested();
+
+                _page = result.Page;
+                _totalCount = result.TotalCount;
+                Rows.Clear();
+                foreach (var code in result.Items)
+                    Rows.Add(CreateRow(code));
+                UpdatePagination();
+            }
+            catch (OperationCanceledException)
+            {
+                // Новый запрос заменил устаревший результат.
+            }
+            catch (Exception ex)
+            {
+                ErrorBar.Message = $"Не удалось загрузить справочник МКБ. {ex.Message}";
+                ErrorBar.IsOpen = true;
+            }
+            finally
+            {
+                if (ReferenceEquals(_loadCancellation, cancellation))
+                {
+                    _loadCancellation = null;
+                    SetLoading(false);
+                }
+                cancellation.Dispose();
+            }
         }
 
-        private void SearchBox_TextChanged(object sender, TextChangedEventArgs e) => ApplyFilter();
+        private static IcdRow CreateRow(IcdCode code) => new()
+        {
+            Code = code.Code,
+            Name = code.Name,
+        };
+
+        private void SetLoading(bool isLoading)
+        {
+            LoadingRing.IsActive = isLoading;
+            LoadingRing.Visibility = isLoading ? Visibility.Visible : Visibility.Collapsed;
+            if (isLoading)
+            {
+                PreviousPageButton.IsEnabled = false;
+                NextPageButton.IsEnabled = false;
+            }
+            else
+            {
+                UpdatePagination();
+            }
+        }
+
+        private void UpdatePagination()
+        {
+            var totalPages = Math.Max(1, (int)Math.Ceiling(_totalCount / (double)PageSize));
+            var first = _totalCount == 0 ? 0 : (_page - 1) * PageSize + 1;
+            var last = Math.Min((long)_page * PageSize, _totalCount);
+            CountText.Text = $"Найдено: {_totalCount}";
+            PageText.Text = _totalCount == 0
+                ? "Нет записей"
+                : $"{first}–{last} из {_totalCount} · страница {_page} из {totalPages}";
+            PreviousPageButton.IsEnabled = _page > 1;
+            NextPageButton.IsEnabled = _page < totalPages;
+        }
+
+        private void SearchBox_TextChanged(object sender, TextChangedEventArgs e)
+        {
+            if (!_isPageActive)
+                return;
+            _page = 1;
+            _ = LoadDataAsync(debounce: true);
+        }
+
+        private async void PreviousPageButton_Click(object sender, RoutedEventArgs e)
+        {
+            if (_page <= 1)
+                return;
+            _page--;
+            await LoadDataAsync();
+        }
+
+        private async void NextPageButton_Click(object sender, RoutedEventArgs e)
+        {
+            var totalPages = Math.Max(1, (int)Math.Ceiling(_totalCount / (double)PageSize));
+            if (_page >= totalPages)
+                return;
+            _page++;
+            await LoadDataAsync();
+        }
 
         // ── Добавление / изменение ───────────────────────────────────
 
@@ -78,7 +177,7 @@ namespace MedSystem.App.Pages
         {
             if (sender is FrameworkElement { Tag: string code })
             {
-                var row = _allRows.FirstOrDefault(r => r.Code == code);
+                var row = Rows.FirstOrDefault(r => r.Code == code);
                 if (row != null)
                     _ = ShowEditDialogAsync(row);
             }
@@ -135,7 +234,7 @@ namespace MedSystem.App.Pages
                 return;
             }
 
-            LoadData();
+            await LoadDataAsync();
         }
 
         // ── Удаление ─────────────────────────────────────────────────
@@ -159,7 +258,7 @@ namespace MedSystem.App.Pages
             if (await dialog.ShowAsync() == ContentDialogResult.Primary)
             {
                 IcdRepository.Delete(code);
-                LoadData();
+                await LoadDataAsync();
             }
         }
 

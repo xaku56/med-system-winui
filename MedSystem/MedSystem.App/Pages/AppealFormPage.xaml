@@ -60,10 +60,16 @@
                 <TextBox x:Name="ComplaintsBox" Header="Жалобы"
                          AcceptsReturn="True" TextWrapping="Wrap" Height="90" />
 
-                <AutoSuggestBox x:Name="DiagnosisBox"
-                                Header="Диагноз (МКБ)"
-                                PlaceholderText="Начните вводить код или название..."
-                                TextChanged="DiagnosisBox_TextChanged" />
+                <Grid>
+                    <AutoSuggestBox x:Name="DiagnosisBox"
+                                    Header="Диагноз (МКБ)"
+                                    PlaceholderText="Начните вводить код или название..."
+                                    TextChanged="DiagnosisBox_TextChanged" />
+                    <ProgressRing x:Name="DiagnosisSearchRing" Width="18" Height="18"
+                                  Margin="0,22,12,0" HorizontalAlignment="Right"
+                                  VerticalAlignment="Center" IsHitTestVisible="False"
+                                  IsActive="False" Visibility="Collapsed" />
+                </Grid>
 
                 <TextBox x:Name="ActionsBox" Header="Действия и рекомендации"
                          AcceptsReturn="True" TextWrapping="Wrap" Height="90" />
