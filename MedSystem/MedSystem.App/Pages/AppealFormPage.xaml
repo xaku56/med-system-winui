@@ -36,12 +36,18 @@
                     <TextBox x:Name="CreatedAtBox" Grid.Row="0" Grid.Column="1"
                              Header="Дата обращения" PlaceholderText="дд.мм.гггг" MaxLength="10" />
 
-                    <AutoSuggestBox x:Name="SenderBox" Grid.Row="1" Grid.Column="0" Grid.ColumnSpan="2"
-                                    Header="Отправитель"
-                                    PlaceholderText="Начните вводить ФИО..."
-                                    TextMemberPath="Display"
-                                    TextChanged="SenderBox_TextChanged"
-                                    SuggestionChosen="SenderBox_SuggestionChosen" />
+                    <Grid Grid.Row="1" Grid.Column="0" Grid.ColumnSpan="2">
+                        <AutoSuggestBox x:Name="SenderBox"
+                                        Header="Отправитель"
+                                        PlaceholderText="Начните вводить ФИО..."
+                                        TextMemberPath="Display"
+                                        TextChanged="SenderBox_TextChanged"
+                                        SuggestionChosen="SenderBox_SuggestionChosen" />
+                        <ProgressRing x:Name="SenderSearchRing" Width="18" Height="18"
+                                      Margin="0,22,12,0" HorizontalAlignment="Right"
+                                      VerticalAlignment="Center" IsHitTestVisible="False"
+                                      IsActive="False" Visibility="Collapsed" />
+                    </Grid>
 
                     <TextBox x:Name="BirthDateBox" Grid.Row="2" Grid.Column="0"
                              Header="Дата рождения" PlaceholderText="дд.мм.гггг" MaxLength="10" />

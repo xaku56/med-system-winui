@@ -11,7 +11,9 @@
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto" />
             <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
             <RowDefinition Height="*" />
+            <RowDefinition Height="Auto" />
         </Grid.RowDefinitions>
 
         <Grid Grid.Row="0">
@@ -28,7 +30,10 @@
                  PlaceholderText="Поиск по номеру или отправителю..."
                  TextChanged="SearchBox_TextChanged" />
 
-        <Border Grid.Row="2" CornerRadius="8" BorderThickness="1"
+        <InfoBar x:Name="ErrorBar" Grid.Row="2" Margin="0,0,0,12"
+                 IsOpen="False" Severity="Error" Title="Ошибка загрузки" />
+
+        <Border Grid.Row="3" CornerRadius="8" BorderThickness="1"
                 Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
                 BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}">
             <Grid>
@@ -80,8 +85,21 @@
                         </DataTemplate>
                     </ListView.ItemTemplate>
                 </ListView>
+                <ProgressRing x:Name="LoadingRing" Grid.Row="2" Width="40" Height="40"
+                              IsActive="False" Visibility="Collapsed"
+                              HorizontalAlignment="Center" VerticalAlignment="Center" />
             </Grid>
         </Border>
+
+        <Grid Grid.Row="4" Margin="0,12,0,0">
+            <TextBlock x:Name="PageText" VerticalAlignment="Center" Opacity="0.7" />
+            <StackPanel Orientation="Horizontal" Spacing="8" HorizontalAlignment="Right">
+                <Button x:Name="PreviousPageButton" Content="Назад"
+                        Click="PreviousPageButton_Click" />
+                <Button x:Name="NextPageButton" Content="Далее"
+                        Click="NextPageButton_Click" />
+            </StackPanel>
+        </Grid>
 
     </Grid>
 </Page>

@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
@@ -17,7 +18,7 @@ namespace MedSystem.App.Pages
     public sealed partial class AppealFormPage : Page
     {
         private long _appealId;
-        private List<PersonOption> _persons = new();
+        private CancellationTokenSource? _personSearchCancellation;
 
         public AppealFormPage()
         {
@@ -28,7 +29,6 @@ namespace MedSystem.App.Pages
         {
             base.OnNavigatedTo(e);
             _appealId = e.Parameter is long id ? id : 0;
-            _persons = AppealRepository.GetPersonsForPicker();
 
             if (_appealId > 0)
             {
@@ -42,6 +42,12 @@ namespace MedSystem.App.Pages
                 NumberBox.Value = AppealRepository.GetNextNumber();
                 CreatedAtBox.Text = DateTime.Now.ToString(ExpirationRules.DateFormat);
             }
+        }
+
+        protected override void OnNavigatedFrom(NavigationEventArgs e)
+        {
+            _personSearchCancellation?.Cancel();
+            base.OnNavigatedFrom(e);
         }
 
         private void FillForm(Appeal a)
@@ -80,15 +86,53 @@ namespace MedSystem.App.Pages
 
         // ── Автодополнение отправителя ───────────────────────────────
 
-        private void SenderBox_TextChanged(AutoSuggestBox sender, AutoSuggestBoxTextChangedEventArgs args)
+        private async void SenderBox_TextChanged(
+            AutoSuggestBox sender,
+            AutoSuggestBoxTextChangedEventArgs args)
         {
             if (args.Reason != AutoSuggestionBoxTextChangeReason.UserInput)
                 return;
 
-            var query = sender.Text.Trim().ToLowerInvariant();
-            sender.ItemsSource = string.IsNullOrEmpty(query)
-                ? null
-                : _persons.Where(p => p.Display.ToLowerInvariant().Contains(query)).Take(20).ToList();
+            _personSearchCancellation?.Cancel();
+            var query = sender.Text.Trim();
+            if (query.Length == 0)
+            {
+                sender.ItemsSource = null;
+                SenderSearchRing.IsActive = false;
+                SenderSearchRing.Visibility = Visibility.Collapsed;
+                return;
+            }
+
+            var cancellation = new CancellationTokenSource();
+            _personSearchCancellation = cancellation;
+            try
+            {
+                await Task.Delay(250, cancellation.Token);
+                SenderSearchRing.IsActive = true;
+                SenderSearchRing.Visibility = Visibility.Visible;
+                var persons = await Task.Run(
+                    () => AppealRepository.SearchPersons(query), cancellation.Token);
+                cancellation.Token.ThrowIfCancellationRequested();
+                sender.ItemsSource = persons;
+            }
+            catch (OperationCanceledException)
+            {
+                // Продолжаем только с последней введённой строкой.
+            }
+            catch
+            {
+                sender.ItemsSource = null;
+            }
+            finally
+            {
+                if (ReferenceEquals(_personSearchCancellation, cancellation))
+                {
+                    _personSearchCancellation = null;
+                    SenderSearchRing.IsActive = false;
+                    SenderSearchRing.Visibility = Visibility.Collapsed;
+                }
+                cancellation.Dispose();
+            }
         }
 
         private void SenderBox_SuggestionChosen(AutoSuggestBox sender, AutoSuggestBoxSuggestionChosenEventArgs args)

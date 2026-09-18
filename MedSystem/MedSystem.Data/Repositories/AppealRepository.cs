@@ -2,6 +2,20 @@ using MedSystem.Core.Models;
 
 namespace MedSystem.Data.Repositories;
 
+public sealed class AppealPageRequest
+{
+    public string SearchText { get; init; } = "";
+    public int Page { get; init; } = 1;
+    public int PageSize { get; init; } = 100;
+}
+
+public sealed class AppealPageResult
+{
+    public required List<Appeal> Items { get; init; }
+    public long TotalCount { get; init; }
+    public int Page { get; init; }
+}
+
 public static class AppealRepository
 {
     private const string Columns = """
@@ -17,16 +31,47 @@ public static class AppealRepository
         return Convert.ToInt64(cmd.ExecuteScalar());
     }
 
-    public static List<Appeal> GetAll()
+    public static AppealPageResult GetPage(AppealPageRequest request)
     {
+        var pageSize = Math.Clamp(request.PageSize, 1, 200);
+        var requestedPage = Math.Max(request.Page, 1);
+        var where = new List<string> { "deleted_at IS NULL" };
+
         using var conn = Db.Open();
         using var cmd = conn.CreateCommand();
-        cmd.CommandText = $"SELECT {Columns} FROM appeals WHERE deleted_at IS NULL ORDER BY number DESC";
+
+        var search = request.SearchText.Trim();
+        if (search.Length > 0)
+        {
+            where.Add("(contains_ci(CAST(number AS TEXT), $search) OR contains_ci(sender, $search))");
+            cmd.Parameters.AddWithValue("$search", search);
+        }
+
+        var whereSql = string.Join(" AND ", where);
+        cmd.CommandText = $"SELECT COUNT(*) FROM appeals WHERE {whereSql}";
+        var totalCount = Convert.ToInt64(cmd.ExecuteScalar());
+        var totalPages = Math.Max(1, (int)Math.Ceiling(totalCount / (double)pageSize));
+        var page = Math.Min(requestedPage, totalPages);
+
+        cmd.Parameters.AddWithValue("$limit", pageSize);
+        cmd.Parameters.AddWithValue("$offset", (page - 1) * pageSize);
+        cmd.CommandText = $"""
+            SELECT {Columns} FROM appeals
+            WHERE {whereSql}
+            ORDER BY number DESC, id DESC
+            LIMIT $limit OFFSET $offset
+            """;
         using var reader = cmd.ExecuteReader();
-        var result = new List<Appeal>();
+        var items = new List<Appeal>(pageSize);
         while (reader.Read())
-            result.Add(Map(reader));
-        return result;
+            items.Add(Map(reader));
+
+        return new AppealPageResult
+        {
+            Items = items,
+            TotalCount = totalCount,
+            Page = page,
+        };
     }
 
     public static Appeal? GetById(long id)
@@ -85,66 +130,58 @@ public static class AppealRepository
 
     public static void MoveToTrash(long id) => TrashRepository.MoveToTrash("appeal", id);
 
-    /// <summary>Сотрудники и студенты одним списком — для выбора
-    /// отправителя обращения (перенос fetch_persons_for_combobox).</summary>
-    public static List<PersonOption> GetPersonsForPicker()
+    public static List<PersonOption> SearchPersons(string query, int limit = 20)
     {
+        query = query.Trim();
+        if (query.Length == 0)
+            return new List<PersonOption>();
+
+        limit = Math.Clamp(limit, 1, 100);
         var persons = new List<PersonOption>();
         using var conn = Db.Open();
-
-        using (var cmd = conn.CreateCommand())
-        {
-            cmd.CommandText = """
-                SELECT last_name, first_name, middle_name, birth_date, affiliation
+        using var cmd = conn.CreateCommand();
+        cmd.CommandText = """
+            SELECT last_name, first_name, middle_name, birth_date, context, person_type
+            FROM (
+                SELECT last_name, first_name, middle_name, birth_date,
+                       affiliation AS context, 0 AS person_type
                 FROM employees
                 WHERE deleted_at IS NULL AND archived_at IS NULL
-                """;
-            using var reader = cmd.ExecuteReader();
-            while (reader.Read())
-            {
-                var fio = string.Join(' ', new[]
-                {
-                    reader.GetString(0), reader.GetString(1), reader.GetString(2)
-                }.Where(p => !string.IsNullOrWhiteSpace(p)));
-                var affiliation = reader.IsDBNull(4) ? "" : reader.GetString(4);
-                persons.Add(new PersonOption
-                {
-                    Display = string.IsNullOrWhiteSpace(affiliation)
-                        ? $"{fio} (Сотрудник)"
-                        : $"{fio} (Сотрудник, {affiliation})",
-                    BirthDate = reader.GetString(3),
-                    GroupName = affiliation,
-                });
-            }
-        }
-
-        using (var cmd = conn.CreateCommand())
-        {
-            cmd.CommandText = """
-                SELECT s.last_name, s.first_name, s.middle_name, s.birth_date, g.name
-                FROM students s LEFT JOIN groups g ON s.group_id = g.id
+                  AND (contains_ci(last_name || ' ' || first_name || ' ' || middle_name, $query)
+                       OR contains_ci(affiliation, $query))
+                UNION ALL
+                SELECT s.last_name, s.first_name, s.middle_name, s.birth_date,
+                       g.name AS context, 1 AS person_type
+                FROM students s
+                LEFT JOIN groups g ON s.group_id = g.id
                 WHERE s.deleted_at IS NULL AND s.archived_at IS NULL
-                """;
-            using var reader = cmd.ExecuteReader();
-            while (reader.Read())
+                  AND (contains_ci(s.last_name || ' ' || s.first_name || ' ' || s.middle_name, $query)
+                       OR contains_ci(g.name, $query))
+            )
+            ORDER BY last_name, first_name, middle_name
+            LIMIT $limit
+            """;
+        cmd.Parameters.AddWithValue("$query", query);
+        cmd.Parameters.AddWithValue("$limit", limit);
+        using var reader = cmd.ExecuteReader();
+        while (reader.Read())
+        {
+            var fio = string.Join(' ', new[]
             {
-                var fio = string.Join(' ', new[]
-                {
-                    reader.GetString(0), reader.GetString(1), reader.GetString(2)
-                }.Where(p => !string.IsNullOrWhiteSpace(p)));
-                var groupName = reader.IsDBNull(4) ? "" : reader.GetString(4);
-                persons.Add(new PersonOption
-                {
-                    Display = string.IsNullOrWhiteSpace(groupName)
-                        ? $"{fio} (Студент)"
-                        : $"{fio} (Группа {groupName})",
-                    BirthDate = reader.GetString(3),
-                    GroupName = groupName,
-                });
-            }
+                reader.GetString(0), reader.GetString(1), reader.GetString(2)
+            }.Where(p => !string.IsNullOrWhiteSpace(p)));
+            var context = reader.IsDBNull(4) ? "" : reader.GetString(4);
+            var isStudent = reader.GetInt64(5) == 1;
+            persons.Add(new PersonOption
+            {
+                Display = isStudent
+                    ? string.IsNullOrWhiteSpace(context) ? $"{fio} (Студент)" : $"{fio} (Группа {context})"
+                    : string.IsNullOrWhiteSpace(context) ? $"{fio} (Сотрудник)" : $"{fio} (Сотрудник, {context})",
+                BirthDate = reader.GetString(3),
+                GroupName = context,
+            });
         }
-
-        return persons.OrderBy(p => p.Display).ToList();
+        return persons;
     }
 
     private static Appeal Map(Microsoft.Data.Sqlite.SqliteDataReader r) => new()

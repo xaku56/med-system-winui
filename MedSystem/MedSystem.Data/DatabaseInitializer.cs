@@ -119,6 +119,7 @@ public static class DatabaseInitializer
 
         Execute(conn, "CREATE INDEX IF NOT EXISTS idx_students_group_id ON students(group_id)");
         Execute(conn, "CREATE INDEX IF NOT EXISTS idx_appeals_number ON appeals(number)");
+        Execute(conn, "CREATE INDEX IF NOT EXISTS idx_appeals_active_number ON appeals(deleted_at, number DESC, id DESC)");
         Execute(conn, "CREATE INDEX IF NOT EXISTS idx_medicines_active_name ON medicines(deleted_at, name, id)");
 
         ApplyVersionedMigrations(conn);
