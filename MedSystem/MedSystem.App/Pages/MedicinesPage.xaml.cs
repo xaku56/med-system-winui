@@ -1,13 +1,15 @@
 using System;
-using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Linq;
+using System.Threading;
+using System.Threading.Tasks;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Media;
 using Microsoft.UI.Xaml.Input;
 using Microsoft.UI.Xaml.Navigation;
 using MedSystem.Core;
+using MedSystem.Core.Models;
 using MedSystem.Data.Repositories;
 
 namespace MedSystem.App.Pages
@@ -33,7 +35,12 @@ namespace MedSystem.App.Pages
         /// <summary>Порог «мало лекарства» (штук).</summary>
         public const int LowQuantityThreshold = 5;
 
-        private List<MedicineRow> _allRows = new();
+        private const int PageSize = 100;
+
+        private long _totalCount;
+        private int _page = 1;
+        private bool _isPageActive;
+        private CancellationTokenSource? _loadCancellation;
         public ObservableCollection<MedicineRow> Rows { get; } = new();
 
         public MedicinesPage()
@@ -48,67 +55,157 @@ namespace MedSystem.App.Pages
         protected override void OnNavigatedTo(NavigationEventArgs e)
         {
             base.OnNavigatedTo(e);
-            LoadData();
+            _isPageActive = true;
+            _page = 1;
+            _ = LoadDataAsync();
         }
 
-        private void LoadData()
+        protected override void OnNavigatedFrom(NavigationEventArgs e)
         {
-            var dark = ActualTheme == ElementTheme.Dark;
-            _allRows = MedicineRepository.GetAll().Select(m =>
-            {
-                var (isExpired, isExpiring) = ExpirationRules.GetMedicineStatus(m.ExpirationDate);
-                var isLow = m.Quantity <= LowQuantityThreshold;
-                var (dateBg, dateFg) = Badges.For(isExpired, isExpiring, dark);
-                var (qtyBg, qtyFg) = Badges.For(isLow, false, dark);
-                return new MedicineRow
-                {
-                    Id = m.Id,
-                    Name = m.Name,
-                    Quantity = m.Quantity.ToString(),
-                    Dosage = m.Dosage,
-                    ExpirationDate = m.ExpirationDate,
-                    IsExpired = isExpired,
-                    IsExpiring = isExpiring,
-                    IsLowQuantity = isLow,
-                    QtyBg = qtyBg,
-                    QtyFg = qtyFg,
-                    DateBg = dateBg,
-                    DateFg = dateFg,
-                };
-            }).ToList();
-            ApplyFilter();
+            _isPageActive = false;
+            _loadCancellation?.Cancel();
+            base.OnNavigatedFrom(e);
         }
 
-        private void ApplyFilter()
+        private async Task LoadDataAsync(bool debounce = false)
         {
-            if (SearchBox == null || FilterBox == null)
+            if (!_isPageActive || SearchBox == null)
                 return;
 
-            var query = SearchBox.Text?.Trim().ToLowerInvariant() ?? "";
-            IEnumerable<MedicineRow> filtered = _allRows;
+            _loadCancellation?.Cancel();
+            var cancellation = new CancellationTokenSource();
+            _loadCancellation = cancellation;
 
-            if (!string.IsNullOrEmpty(query))
-                filtered = filtered.Where(r => r.Name.ToLowerInvariant().Contains(query));
-
-            filtered = FilterBox.SelectedIndex switch
+            try
             {
-                1 => filtered.Where(r => r.IsLowQuantity),  // Мало (<= 5)
-                2 => filtered.Where(r => r.IsExpiring),     // Истекают (2 недели)
-                3 => filtered.Where(r => r.IsExpired),      // Просроченные
-                _ => filtered,
-            };
+                if (debounce)
+                    await Task.Delay(300, cancellation.Token);
 
-            var list = filtered.ToList();
-            Rows.Clear();
-            foreach (var row in list)
-                Rows.Add(row);
+                SetLoading(true);
+                ErrorBar.IsOpen = false;
+                var request = new MedicinePageRequest
+                {
+                    SearchText = SearchBox.Text ?? "",
+                    StatusFilter = FilterBox.SelectedIndex,
+                    LowQuantityThreshold = LowQuantityThreshold,
+                    Page = _page,
+                    PageSize = PageSize,
+                };
+                var result = await Task.Run(
+                    () => MedicineRepository.GetPage(request), cancellation.Token);
+                cancellation.Token.ThrowIfCancellationRequested();
 
-            CountText.Text = $"Всего: {list.Count}";
+                _page = result.Page;
+                _totalCount = result.TotalCount;
+                var dark = ActualTheme == ElementTheme.Dark;
+                Rows.Clear();
+                foreach (var medicine in result.Items)
+                    Rows.Add(CreateRow(medicine, dark));
+                UpdatePagination();
+            }
+            catch (OperationCanceledException)
+            {
+                // Новый запрос заменил устаревший результат.
+            }
+            catch (Exception ex)
+            {
+                ErrorBar.Message = $"Не удалось загрузить лекарства. {ex.Message}";
+                ErrorBar.IsOpen = true;
+            }
+            finally
+            {
+                if (ReferenceEquals(_loadCancellation, cancellation))
+                {
+                    _loadCancellation = null;
+                    SetLoading(false);
+                }
+                cancellation.Dispose();
+            }
         }
 
-        private void SearchBox_TextChanged(object sender, TextChangedEventArgs e) => ApplyFilter();
+        private static MedicineRow CreateRow(Medicine medicine, bool dark)
+        {
+            var (isExpired, isExpiring) = ExpirationRules.GetMedicineStatus(medicine.ExpirationDate);
+            var isLow = medicine.Quantity <= LowQuantityThreshold;
+            var (dateBg, dateFg) = Badges.For(isExpired, isExpiring, dark);
+            var (qtyBg, qtyFg) = Badges.For(isLow, false, dark);
+            return new MedicineRow
+            {
+                Id = medicine.Id,
+                Name = medicine.Name,
+                Quantity = medicine.Quantity.ToString(),
+                Dosage = medicine.Dosage,
+                ExpirationDate = medicine.ExpirationDate,
+                IsExpired = isExpired,
+                IsExpiring = isExpiring,
+                IsLowQuantity = isLow,
+                QtyBg = qtyBg,
+                QtyFg = qtyFg,
+                DateBg = dateBg,
+                DateFg = dateFg,
+            };
+        }
 
-        private void FilterBox_SelectionChanged(object sender, SelectionChangedEventArgs e) => ApplyFilter();
+        private void SetLoading(bool isLoading)
+        {
+            LoadingRing.IsActive = isLoading;
+            LoadingRing.Visibility = isLoading ? Visibility.Visible : Visibility.Collapsed;
+            if (isLoading)
+            {
+                PreviousPageButton.IsEnabled = false;
+                NextPageButton.IsEnabled = false;
+            }
+            else
+            {
+                UpdatePagination();
+            }
+        }
+
+        private void UpdatePagination()
+        {
+            var totalPages = Math.Max(1, (int)Math.Ceiling(_totalCount / (double)PageSize));
+            var first = _totalCount == 0 ? 0 : (_page - 1) * PageSize + 1;
+            var last = Math.Min((long)_page * PageSize, _totalCount);
+            CountText.Text = $"Найдено: {_totalCount}";
+            PageText.Text = _totalCount == 0
+                ? "Нет записей"
+                : $"{first}–{last} из {_totalCount} · страница {_page} из {totalPages}";
+            PreviousPageButton.IsEnabled = _page > 1;
+            NextPageButton.IsEnabled = _page < totalPages;
+        }
+
+        private void SearchBox_TextChanged(object sender, TextChangedEventArgs e)
+        {
+            if (!_isPageActive)
+                return;
+            _page = 1;
+            _ = LoadDataAsync(debounce: true);
+        }
+
+        private void FilterBox_SelectionChanged(object sender, SelectionChangedEventArgs e)
+        {
+            if (!_isPageActive)
+                return;
+            _page = 1;
+            _ = LoadDataAsync();
+        }
+
+        private async void PreviousPageButton_Click(object sender, RoutedEventArgs e)
+        {
+            if (_page <= 1)
+                return;
+            _page--;
+            await LoadDataAsync();
+        }
+
+        private async void NextPageButton_Click(object sender, RoutedEventArgs e)
+        {
+            var totalPages = Math.Max(1, (int)Math.Ceiling(_totalCount / (double)PageSize));
+            if (_page >= totalPages)
+                return;
+            _page++;
+            await LoadDataAsync();
+        }
 
         // ── Действия ─────────────────────────────────────────────────
 
@@ -117,7 +214,23 @@ namespace MedSystem.App.Pages
 
         private async void OrderButton_Click(object sender, RoutedEventArgs e)
         {
-            var hasCandidates = _allRows.Any(r => r.IsLowQuantity || r.IsExpired || r.IsExpiring);
+            bool hasCandidates;
+            try
+            {
+                SetLoading(true);
+                hasCandidates = await Task.Run(
+                    () => MedicineRepository.HasOrderCandidates(LowQuantityThreshold));
+            }
+            catch (Exception ex)
+            {
+                ErrorBar.Message = $"Не удалось проверить список заказа. {ex.Message}";
+                ErrorBar.IsOpen = true;
+                return;
+            }
+            finally
+            {
+                SetLoading(false);
+            }
             if (!hasCandidates)
             {
                 var dialog = new ContentDialog
@@ -151,7 +264,7 @@ namespace MedSystem.App.Pages
             if (sender is not FrameworkElement { Tag: long id })
                 return;
 
-            var row = _allRows.FirstOrDefault(r => r.Id == id);
+            var row = Rows.FirstOrDefault(r => r.Id == id);
             var dialog = new ContentDialog
             {
                 Title = "Перемещение в корзину",
@@ -166,7 +279,7 @@ namespace MedSystem.App.Pages
             if (await dialog.ShowAsync() == ContentDialogResult.Primary)
             {
                 MedicineRepository.MoveToTrash(id);
-                LoadData();
+                await LoadDataAsync();
             }
         }
     }

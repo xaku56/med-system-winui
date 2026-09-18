@@ -36,6 +36,14 @@ public static class Db
                     new[] { sanminimum ?? "", medicalExam ?? "", fluorography ?? "" });
                 return (isExpired ? 1 : 0) | (isExpiring ? 2 : 0);
             });
+        conn.CreateFunction<string?, int>(
+            "medicine_status",
+            expirationDate =>
+            {
+                var (isExpired, isExpiring) = ExpirationRules.GetMedicineStatus(
+                    expirationDate ?? "");
+                return (isExpired ? 1 : 0) | (isExpiring ? 2 : 0);
+            });
         conn.Open();
         return conn;
     }

@@ -5,7 +5,6 @@ using System.Threading.Tasks;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Navigation;
-using MedSystem.Core;
 using MedSystem.Core.Models;
 using MedSystem.Core.Validation;
 using MedSystem.Data.Repositories;
@@ -40,12 +39,7 @@ namespace MedSystem.App.Pages
         {
             base.OnNavigatedTo(e);
 
-            _rows = MedicineRepository.GetAll()
-                .Where(m =>
-                {
-                    var (isExpired, isExpiring) = ExpirationRules.GetMedicineStatus(m.ExpirationDate);
-                    return m.Quantity <= MedicinesPage.LowQuantityThreshold || isExpired || isExpiring;
-                })
+            _rows = MedicineRepository.GetOrderCandidates(MedicinesPage.LowQuantityThreshold)
                 .Select(m => new OrderRow
                 {
                     Id = m.Id,
