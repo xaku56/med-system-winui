@@ -1,3 +1,4 @@
+using MedSystem.Core;
 using System;
 using System.Collections.ObjectModel;
 using System.Threading;
@@ -5,6 +6,7 @@ using System.Threading.Tasks;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Navigation;
+using MedSystem.App.UI;
 using MedSystem.Data.Repositories;
 
 namespace MedSystem.App.Pages
@@ -20,7 +22,7 @@ namespace MedSystem.App.Pages
 
     public sealed partial class TrashPage : Page
     {
-        private const int PageSize = 100;
+        private const int PageSize = Pagination.DefaultPageSize;
         private readonly ObservableCollection<TrashRow> _rows = new();
         private CancellationTokenSource? _loadCancellation;
         private int _page = 1;
@@ -59,7 +61,7 @@ namespace MedSystem.App.Pages
                 token.ThrowIfCancellationRequested();
 
                 _totalCount = result.TotalCount;
-                var totalPages = Math.Max(1, (int)Math.Ceiling(_totalCount / (double)PageSize));
+                var totalPages = Pagination.GetTotalPages(_totalCount, PageSize);
                 if (_page > totalPages)
                 {
                     _page = totalPages;
@@ -136,17 +138,8 @@ namespace MedSystem.App.Pages
             if (sender is not FrameworkElement { Tag: string key })
                 return;
 
-            var dialog = new ContentDialog
-            {
-                Title = "Удалить навсегда?",
-                Content = "Эту запись нельзя будет восстановить из корзины.",
-                PrimaryButtonText = "Удалить навсегда",
-                CloseButtonText = "Отмена",
-                DefaultButton = ContentDialogButton.Close,
-                XamlRoot = XamlRoot,
-                RequestedTheme = ActualTheme,
-            };
-            if (await dialog.ShowAsync() != ContentDialogResult.Primary)
+            if (!await Dialogs.ConfirmAsync(this, "Удалить навсегда?",
+                "Эту запись нельзя будет восстановить из корзины.", "Удалить навсегда"))
                 return;
 
             try
@@ -163,17 +156,8 @@ namespace MedSystem.App.Pages
 
         private async void EmptyTrashButton_Click(object sender, RoutedEventArgs e)
         {
-            var dialog = new ContentDialog
-            {
-                Title = "Очистить корзину?",
-                Content = $"Будут окончательно удалены все записи: {_totalCount}. Это действие нельзя отменить.",
-                PrimaryButtonText = "Очистить",
-                CloseButtonText = "Отмена",
-                DefaultButton = ContentDialogButton.Close,
-                XamlRoot = XamlRoot,
-                RequestedTheme = ActualTheme,
-            };
-            if (await dialog.ShowAsync() != ContentDialogResult.Primary)
+            if (!await Dialogs.ConfirmAsync(this, "Очистить корзину?",
+                $"Будут окончательно удалены все записи: {_totalCount}. Это действие нельзя отменить.", "Очистить"))
                 return;
 
             try

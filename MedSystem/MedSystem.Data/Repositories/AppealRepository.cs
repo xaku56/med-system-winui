@@ -1,3 +1,4 @@
+using MedSystem.Core;
 using MedSystem.Core.Models;
 
 namespace MedSystem.Data.Repositories;
@@ -6,14 +7,7 @@ public sealed class AppealPageRequest
 {
     public string SearchText { get; init; } = "";
     public int Page { get; init; } = 1;
-    public int PageSize { get; init; } = 100;
-}
-
-public sealed class AppealPageResult
-{
-    public required List<Appeal> Items { get; init; }
-    public long TotalCount { get; init; }
-    public int Page { get; init; }
+    public int PageSize { get; init; } = Pagination.DefaultPageSize;
 }
 
 public static class AppealRepository
@@ -23,18 +17,9 @@ public static class AppealRepository
         group_name, complaints, diagnosis, actions_recommendations
         """;
 
-    public static long Count()
+    public static PageResult<Appeal> GetPage(AppealPageRequest request)
     {
-        using var conn = Db.Open();
-        using var cmd = conn.CreateCommand();
-        cmd.CommandText = "SELECT COUNT(*) FROM appeals WHERE deleted_at IS NULL";
-        return Convert.ToInt64(cmd.ExecuteScalar());
-    }
-
-    public static AppealPageResult GetPage(AppealPageRequest request)
-    {
-        var pageSize = Math.Clamp(request.PageSize, 1, 200);
-        var requestedPage = Math.Max(request.Page, 1);
+        var pageSize = Math.Clamp(request.PageSize, 1, Pagination.MaximumPageSize);
         var where = new List<string> { "deleted_at IS NULL" };
 
         using var conn = Db.Open();
@@ -50,8 +35,7 @@ public static class AppealRepository
         var whereSql = string.Join(" AND ", where);
         cmd.CommandText = $"SELECT COUNT(*) FROM appeals WHERE {whereSql}";
         var totalCount = Convert.ToInt64(cmd.ExecuteScalar());
-        var totalPages = Math.Max(1, (int)Math.Ceiling(totalCount / (double)pageSize));
-        var page = Math.Min(requestedPage, totalPages);
+        var page = Pagination.ClampPage(request.Page, totalCount, pageSize);
 
         cmd.Parameters.AddWithValue("$limit", pageSize);
         cmd.Parameters.AddWithValue("$offset", (page - 1) * pageSize);
@@ -66,7 +50,7 @@ public static class AppealRepository
         while (reader.Read())
             items.Add(Map(reader));
 
-        return new AppealPageResult
+        return new PageResult<Appeal>
         {
             Items = items,
             TotalCount = totalCount,

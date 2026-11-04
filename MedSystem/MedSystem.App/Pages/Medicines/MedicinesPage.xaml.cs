@@ -1,13 +1,13 @@
 using System;
 using System.Collections.ObjectModel;
 using System.Linq;
-using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
-using Microsoft.UI.Xaml.Media;
 using Microsoft.UI.Xaml.Input;
+using Microsoft.UI.Xaml.Media;
 using Microsoft.UI.Xaml.Navigation;
+using MedSystem.App.UI;
 using MedSystem.Core;
 using MedSystem.Core.Models;
 using MedSystem.Data.Repositories;
@@ -21,9 +21,6 @@ namespace MedSystem.App.Pages
         public string Quantity { get; set; } = "";
         public string Dosage { get; set; } = "";
         public string ExpirationDate { get; set; } = "";
-        public bool IsExpired { get; set; }
-        public bool IsExpiring { get; set; }
-        public bool IsLowQuantity { get; set; }
         public Brush QtyBg { get; set; } = Badges.TransparentBg;
         public Brush QtyFg { get; set; } = Badges.NormalFg;
         public Brush DateBg { get; set; } = Badges.TransparentBg;
@@ -32,15 +29,12 @@ namespace MedSystem.App.Pages
 
     public sealed partial class MedicinesPage : Page
     {
-        /// <summary>Порог «мало лекарства» (штук).</summary>
-        public const int LowQuantityThreshold = 5;
-
-        private const int PageSize = 100;
+        private const int PageSize = Pagination.DefaultPageSize;
 
         private long _totalCount;
         private int _page = 1;
         private bool _isPageActive;
-        private CancellationTokenSource? _loadCancellation;
+        private readonly LatestLoad _loader = new();
         public ObservableCollection<MedicineRow> Rows { get; } = new();
 
         public MedicinesPage()
@@ -63,37 +57,29 @@ namespace MedSystem.App.Pages
         protected override void OnNavigatedFrom(NavigationEventArgs e)
         {
             _isPageActive = false;
-            _loadCancellation?.Cancel();
+            _loader.Cancel();
             base.OnNavigatedFrom(e);
         }
 
-        private async Task LoadDataAsync(bool debounce = false)
+        private Task LoadDataAsync(bool debounce = false)
         {
             if (!_isPageActive || SearchBox == null)
-                return;
+                return Task.CompletedTask;
 
-            _loadCancellation?.Cancel();
-            var cancellation = new CancellationTokenSource();
-            _loadCancellation = cancellation;
-
-            try
+            return _loader.RunAsync(async token =>
             {
-                if (debounce)
-                    await Task.Delay(300, cancellation.Token);
-
-                SetLoading(true);
                 ErrorBar.IsOpen = false;
                 var request = new MedicinePageRequest
                 {
                     SearchText = SearchBox.Text ?? "",
                     StatusFilter = FilterBox.SelectedIndex,
-                    LowQuantityThreshold = LowQuantityThreshold,
+                    LowQuantityThreshold = MedicineRules.LowQuantityThreshold,
                     Page = _page,
                     PageSize = PageSize,
                 };
                 var result = await Task.Run(
-                    () => MedicineRepository.GetPage(request), cancellation.Token);
-                cancellation.Token.ThrowIfCancellationRequested();
+                    () => MedicineRepository.GetPage(request), token);
+                token.ThrowIfCancellationRequested();
 
                 _page = result.Page;
                 _totalCount = result.TotalCount;
@@ -102,31 +88,17 @@ namespace MedSystem.App.Pages
                 foreach (var medicine in result.Items)
                     Rows.Add(CreateRow(medicine, dark));
                 UpdatePagination();
-            }
-            catch (OperationCanceledException)
-            {
-                // Новый запрос заменил устаревший результат.
-            }
-            catch (Exception ex)
+            }, SetLoading, ex =>
             {
                 ErrorBar.Message = $"Не удалось загрузить лекарства. {ex.Message}";
                 ErrorBar.IsOpen = true;
-            }
-            finally
-            {
-                if (ReferenceEquals(_loadCancellation, cancellation))
-                {
-                    _loadCancellation = null;
-                    SetLoading(false);
-                }
-                cancellation.Dispose();
-            }
+            }, debounce ? 300 : 0);
         }
 
         private static MedicineRow CreateRow(Medicine medicine, bool dark)
         {
             var (isExpired, isExpiring) = ExpirationRules.GetMedicineStatus(medicine.ExpirationDate);
-            var isLow = medicine.Quantity <= LowQuantityThreshold;
+            var isLow = medicine.Quantity <= MedicineRules.LowQuantityThreshold;
             var (dateBg, dateFg) = Badges.For(isExpired, isExpiring, dark);
             var (qtyBg, qtyFg) = Badges.For(isLow, false, dark);
             return new MedicineRow
@@ -136,9 +108,6 @@ namespace MedSystem.App.Pages
                 Quantity = medicine.Quantity.ToString(),
                 Dosage = medicine.Dosage,
                 ExpirationDate = medicine.ExpirationDate,
-                IsExpired = isExpired,
-                IsExpiring = isExpiring,
-                IsLowQuantity = isLow,
                 QtyBg = qtyBg,
                 QtyFg = qtyFg,
                 DateBg = dateBg,
@@ -163,7 +132,7 @@ namespace MedSystem.App.Pages
 
         private void UpdatePagination()
         {
-            var totalPages = Math.Max(1, (int)Math.Ceiling(_totalCount / (double)PageSize));
+            var totalPages = Pagination.GetTotalPages(_totalCount, PageSize);
             var first = _totalCount == 0 ? 0 : (_page - 1) * PageSize + 1;
             var last = Math.Min((long)_page * PageSize, _totalCount);
             CountText.Text = $"Найдено: {_totalCount}";
@@ -200,7 +169,7 @@ namespace MedSystem.App.Pages
 
         private async void NextPageButton_Click(object sender, RoutedEventArgs e)
         {
-            var totalPages = Math.Max(1, (int)Math.Ceiling(_totalCount / (double)PageSize));
+            var totalPages = Pagination.GetTotalPages(_totalCount, PageSize);
             if (_page >= totalPages)
                 return;
             _page++;
@@ -219,7 +188,7 @@ namespace MedSystem.App.Pages
             {
                 SetLoading(true);
                 hasCandidates = await Task.Run(
-                    () => MedicineRepository.HasOrderCandidates(LowQuantityThreshold));
+                    () => MedicineRepository.HasOrderCandidates(MedicineRules.LowQuantityThreshold));
             }
             catch (Exception ex)
             {
@@ -233,15 +202,7 @@ namespace MedSystem.App.Pages
             }
             if (!hasCandidates)
             {
-                var dialog = new ContentDialog
-                {
-                    Title = "Заказ лекарств",
-                    Content = "Все лекарства в норме. Заказывать ничего не нужно.",
-                    CloseButtonText = "Понятно",
-                    XamlRoot = XamlRoot,
-                    RequestedTheme = ActualTheme,
-                };
-                await dialog.ShowAsync();
+                await Dialogs.MessageAsync(this, "Заказ лекарств", "Все лекарства в норме. Заказывать ничего не нужно.");
                 return;
             }
             Frame.Navigate(typeof(OrderMedicinesPage));
@@ -265,18 +226,8 @@ namespace MedSystem.App.Pages
                 return;
 
             var row = Rows.FirstOrDefault(r => r.Id == id);
-            var dialog = new ContentDialog
-            {
-                Title = "Перемещение в корзину",
-                Content = $"Переместить лекарство «{row?.Name}» в корзину?",
-                PrimaryButtonText = "В корзину",
-                CloseButtonText = "Отмена",
-                DefaultButton = ContentDialogButton.Close,
-                XamlRoot = XamlRoot,
-                RequestedTheme = ActualTheme,
-            };
-
-            if (await dialog.ShowAsync() == ContentDialogResult.Primary)
+            if (await Dialogs.ConfirmAsync(this, "Перемещение в корзину",
+                $"Переместить лекарство «{row?.Name}» в корзину?", "В корзину"))
             {
                 MedicineRepository.MoveToTrash(id);
                 await LoadDataAsync();

@@ -12,4 +12,5 @@
   </Project>
   <Project Path="MedSystem.Core/MedSystem.Core.csproj" />
   <Project Path="MedSystem.Data/MedSystem.Data.csproj" />
+  <Project Path="MedSystem.Checks/MedSystem.Checks.csproj" />
 </Solution>

@@ -4,6 +4,8 @@ using System.Threading.Tasks;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Navigation;
+using MedSystem.App.UI;
+using MedSystem.Core;
 using MedSystem.Data.Repositories;
 
 namespace MedSystem.App.Pages
@@ -41,7 +43,7 @@ namespace MedSystem.App.Pages
             try
             {
                 var snapshot = await Task.Run(
-                    () => DashboardRepository.GetSnapshot(MedicinesPage.LowQuantityThreshold),
+                    () => DashboardRepository.GetSnapshot(MedicineRules.LowQuantityThreshold),
                     cancellation.Token);
                 cancellation.Token.ThrowIfCancellationRequested();
 
@@ -89,15 +91,7 @@ namespace MedSystem.App.Pages
         {
             if (GroupRepository.GetAll().Count == 0)
             {
-                var dialog = new ContentDialog
-                {
-                    Title = "Нет групп",
-                    Content = "Сначала добавьте хотя бы одну учебную группу (раздел «Студенты» → «Группы»).",
-                    CloseButtonText = "Понятно",
-                    XamlRoot = XamlRoot,
-                    RequestedTheme = ActualTheme,
-                };
-                await dialog.ShowAsync();
+                await Dialogs.MessageAsync(this, "Нет групп", "Сначала добавьте хотя бы одну учебную группу (раздел «Студенты» → «Группы»).");
                 return;
             }
             Frame.Navigate(typeof(StudentFormPage), 0L);

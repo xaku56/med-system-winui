@@ -1,12 +1,12 @@
 using System;
 using System.Collections.ObjectModel;
 using System.Linq;
-using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Input;
 using Microsoft.UI.Xaml.Navigation;
+using MedSystem.App.UI;
 using MedSystem.Core;
 using MedSystem.Core.Models;
 using MedSystem.Data.Repositories;
@@ -23,8 +23,6 @@ namespace MedSystem.App.Pages
         public string Sanminimum { get; set; } = "";
         public string MedicalExam { get; set; } = "";
         public string Fluorography { get; set; } = "";
-        public bool IsExpired { get; set; }
-        public bool IsExpiring { get; set; }
         public Visibility ArchiveVisibility { get; set; }
         public Visibility RestoreVisibility { get; set; }
         public Microsoft.UI.Xaml.Media.Brush SanminimumBg { get; set; } = Badges.TransparentBg;
@@ -37,12 +35,12 @@ namespace MedSystem.App.Pages
 
     public sealed partial class EmployeesPage : Page
     {
-        private const int PageSize = 100;
+        private const int PageSize = Pagination.DefaultPageSize;
 
         private long _totalCount;
         private int _page = 1;
         private bool _isPageActive;
-        private CancellationTokenSource? _loadCancellation;
+        private readonly LatestLoad _loader = new();
         public ObservableCollection<EmployeeRow> Rows { get; } = new();
 
         public EmployeesPage()
@@ -65,25 +63,17 @@ namespace MedSystem.App.Pages
         protected override void OnNavigatedFrom(NavigationEventArgs e)
         {
             _isPageActive = false;
-            _loadCancellation?.Cancel();
+            _loader.Cancel();
             base.OnNavigatedFrom(e);
         }
 
-        private async Task LoadDataAsync(bool debounce = false)
+        private Task LoadDataAsync(bool debounce = false)
         {
             if (!_isPageActive || SearchBox == null)
-                return;
+                return Task.CompletedTask;
 
-            _loadCancellation?.Cancel();
-            var cancellation = new CancellationTokenSource();
-            _loadCancellation = cancellation;
-
-            try
+            return _loader.RunAsync(async token =>
             {
-                if (debounce)
-                    await Task.Delay(300, cancellation.Token);
-
-                SetLoading(true);
                 ErrorBar.IsOpen = false;
                 var request = new EmployeePageRequest
                 {
@@ -94,8 +84,8 @@ namespace MedSystem.App.Pages
                     PageSize = PageSize,
                 };
                 var result = await Task.Run(
-                    () => EmployeeRepository.GetPage(request), cancellation.Token);
-                cancellation.Token.ThrowIfCancellationRequested();
+                    () => EmployeeRepository.GetPage(request), token);
+                token.ThrowIfCancellationRequested();
 
                 _page = result.Page;
                 _totalCount = result.TotalCount;
@@ -106,25 +96,11 @@ namespace MedSystem.App.Pages
 
                 AddButton.IsEnabled = !request.Archived;
                 UpdatePagination();
-            }
-            catch (OperationCanceledException)
-            {
-                // Новый запрос заменил устаревший результат.
-            }
-            catch (Exception ex)
+            }, SetLoading, ex =>
             {
                 ErrorBar.Message = $"Не удалось загрузить сотрудников. {ex.Message}";
                 ErrorBar.IsOpen = true;
-            }
-            finally
-            {
-                if (ReferenceEquals(_loadCancellation, cancellation))
-                {
-                    _loadCancellation = null;
-                    SetLoading(false);
-                }
-                cancellation.Dispose();
-            }
+            }, debounce ? 300 : 0);
         }
 
         private static EmployeeRow CreateRow(Employee employee, bool showArchived, bool dark)
@@ -135,8 +111,6 @@ namespace MedSystem.App.Pages
             var (sanBg, sanFg) = Badges.For(sanStatus.IsExpired, sanStatus.IsExpiring, dark);
             var (medBg, medFg) = Badges.For(medStatus.IsExpired, medStatus.IsExpiring, dark);
             var (fluBg, fluFg) = Badges.For(fluStatus.IsExpired, fluStatus.IsExpiring, dark);
-            var (isExpired, isExpiring) = ExpirationRules.GetPersonStatus(
-                new[] { employee.SanminimumDate, employee.MedicalExamDate, employee.FluorographyDate });
             return new EmployeeRow
             {
                 Id = employee.Id,
@@ -150,8 +124,6 @@ namespace MedSystem.App.Pages
                 Sanminimum = employee.SanminimumDate,
                 MedicalExam = employee.MedicalExamDate,
                 Fluorography = employee.FluorographyDate,
-                IsExpired = isExpired,
-                IsExpiring = isExpiring,
                 ArchiveVisibility = showArchived ? Visibility.Collapsed : Visibility.Visible,
                 RestoreVisibility = showArchived ? Visibility.Visible : Visibility.Collapsed,
                 SanminimumBg = sanBg,
@@ -180,7 +152,7 @@ namespace MedSystem.App.Pages
 
         private void UpdatePagination()
         {
-            var totalPages = Math.Max(1, (int)Math.Ceiling(_totalCount / (double)PageSize));
+            var totalPages = Pagination.GetTotalPages(_totalCount, PageSize);
             var first = _totalCount == 0 ? 0 : (_page - 1) * PageSize + 1;
             var last = Math.Min((long)_page * PageSize, _totalCount);
             CountText.Text = $"Найдено: {_totalCount}";
@@ -225,7 +197,7 @@ namespace MedSystem.App.Pages
 
         private async void NextPageButton_Click(object sender, RoutedEventArgs e)
         {
-            var totalPages = Math.Max(1, (int)Math.Ceiling(_totalCount / (double)PageSize));
+            var totalPages = Pagination.GetTotalPages(_totalCount, PageSize);
             if (_page >= totalPages)
                 return;
             _page++;
@@ -254,26 +226,11 @@ namespace MedSystem.App.Pages
             if (sender is not FrameworkElement { Tag: long id })
                 return;
 
-            var reasonBox = new ComboBox
+            var reason = await Dialogs.ArchiveReasonAsync(this, "Архивировать сотрудника?",
+                new[] { "Не указано", "Увольнение", "Перевод", "Другое" });
+            if (reason != null)
             {
-                Header = "Причина",
-                MinWidth = 320,
-                ItemsSource = new[] { "Не указано", "Увольнение", "Перевод", "Другое" },
-                SelectedIndex = 0,
-            };
-            var dialog = new ContentDialog
-            {
-                Title = "Архивировать сотрудника?",
-                Content = reasonBox,
-                PrimaryButtonText = "Архивировать",
-                CloseButtonText = "Отмена",
-                DefaultButton = ContentDialogButton.Close,
-                XamlRoot = XamlRoot,
-                RequestedTheme = ActualTheme,
-            };
-            if (await dialog.ShowAsync() == ContentDialogResult.Primary)
-            {
-                EmployeeRepository.Archive(id, reasonBox.SelectedItem?.ToString() ?? "Другое");
+                EmployeeRepository.Archive(id, reason);
                 await LoadDataAsync();
             }
         }
@@ -293,18 +250,8 @@ namespace MedSystem.App.Pages
                 return;
 
             var row = Rows.FirstOrDefault(r => r.Id == id);
-            var dialog = new ContentDialog
-            {
-                Title = "Перемещение в корзину",
-                Content = $"Переместить сотрудника «{row?.FullName}» в корзину?",
-                PrimaryButtonText = "В корзину",
-                CloseButtonText = "Отмена",
-                DefaultButton = ContentDialogButton.Close,
-                XamlRoot = XamlRoot,
-                RequestedTheme = ActualTheme,
-            };
-
-            if (await dialog.ShowAsync() == ContentDialogResult.Primary)
+            if (await Dialogs.ConfirmAsync(this, "Перемещение в корзину",
+                $"Переместить сотрудника «{row?.FullName}» в корзину?", "В корзину"))
             {
                 EmployeeRepository.MoveToTrash(id);
                 await LoadDataAsync();

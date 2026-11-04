@@ -1,0 +1,12 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net8.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\MedSystem.Data\MedSystem.Data.csproj" />
+    <Compile Include="..\MedSystem.App\UI\LatestLoad.cs" Link="LatestLoad.cs" />
+  </ItemGroup>
+</Project>

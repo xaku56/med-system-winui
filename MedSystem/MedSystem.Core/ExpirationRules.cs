@@ -28,45 +28,33 @@ public static class ExpirationRules
     public static (bool IsExpired, bool IsExpiring) GetPersonStatus(IEnumerable<string> checkupDates)
     {
         var today = DateOnly.FromDateTime(DateTime.Now);
-        var warningEdge = today.AddDays(WarningDays);
-
         var isExpired = false;
         var isExpiring = false;
         foreach (var value in checkupDates)
         {
-            if (!TryParseDate(value, out var passed))
-                continue;
-            var expires = passed.AddYears(1);  // 29 февраля → 28 февраля автоматически
-            if (expires < today)
-                isExpired = true;
-            else if (expires <= warningEdge)
-                isExpiring = true;
+            var status = GetSingleCheckupStatus(value, today);
+            isExpired |= status.IsExpired;
+            isExpiring |= status.IsExpiring;
         }
         return (isExpired, isExpiring);
     }
 
     /// <summary>Статус одного документа человека (действует 1 год).</summary>
-    public static (bool IsExpired, bool IsExpiring) GetSingleCheckupStatus(string checkupDate)
-    {
-        var today = DateOnly.FromDateTime(DateTime.Now);
-        var warningEdge = today.AddDays(WarningDays);
+    public static (bool IsExpired, bool IsExpiring) GetSingleCheckupStatus(string checkupDate) =>
+        GetSingleCheckupStatus(checkupDate, DateOnly.FromDateTime(DateTime.Now));
 
-        if (!TryParseDate(checkupDate, out var passed))
-            return (false, false);
-
-        var expires = passed.AddYears(1);
-        return (expires < today, expires >= today && expires <= warningEdge);
-    }
+    internal static (bool IsExpired, bool IsExpiring) GetSingleCheckupStatus(string checkupDate, DateOnly today) =>
+        TryParseDate(checkupDate, out var passed)
+            // DateOnly корректно переводит 29 февраля в 28 февраля следующего года.
+            ? GetExpirationStatus(passed.AddYears(1), today)
+            : (false, false);
 
     /// <summary>Статус срока годности лекарства.</summary>
-    public static (bool IsExpired, bool IsExpiring) GetMedicineStatus(string expirationDate)
-    {
-        var today = DateOnly.FromDateTime(DateTime.Now);
-        var warningEdge = today.AddDays(WarningDays);
+    public static (bool IsExpired, bool IsExpiring) GetMedicineStatus(string expirationDate) =>
+        TryParseDate(expirationDate, out var expires)
+            ? GetExpirationStatus(expires, DateOnly.FromDateTime(DateTime.Now))
+            : (false, false);
 
-        if (!TryParseDate(expirationDate, out var expires))
-            return (false, false);
-
-        return (expires < today, expires >= today && expires <= warningEdge);
-    }
+    internal static (bool IsExpired, bool IsExpiring) GetExpirationStatus(DateOnly expires, DateOnly today) =>
+        (expires < today, expires >= today && expires <= today.AddDays(WarningDays));
 }

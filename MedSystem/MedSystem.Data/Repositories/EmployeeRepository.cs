@@ -1,3 +1,4 @@
+using MedSystem.Core;
 using MedSystem.Core.Models;
 
 namespace MedSystem.Data.Repositories;
@@ -8,14 +9,7 @@ public sealed class EmployeePageRequest
     public int StatusFilter { get; init; }
     public bool Archived { get; init; }
     public int Page { get; init; } = 1;
-    public int PageSize { get; init; } = 100;
-}
-
-public sealed class EmployeePageResult
-{
-    public required List<Employee> Items { get; init; }
-    public long TotalCount { get; init; }
-    public int Page { get; init; }
+    public int PageSize { get; init; } = Pagination.DefaultPageSize;
 }
 
 public static class EmployeeRepository
@@ -28,18 +22,9 @@ public static class EmployeeRepository
         archive_reason
         """;
 
-    public static long Count()
+    public static PageResult<Employee> GetPage(EmployeePageRequest request)
     {
-        using var conn = Db.Open();
-        using var cmd = conn.CreateCommand();
-        cmd.CommandText = "SELECT COUNT(*) FROM employees WHERE deleted_at IS NULL AND archived_at IS NULL";
-        return Convert.ToInt64(cmd.ExecuteScalar());
-    }
-
-    public static EmployeePageResult GetPage(EmployeePageRequest request)
-    {
-        var pageSize = Math.Clamp(request.PageSize, 1, 200);
-        var requestedPage = Math.Max(request.Page, 1);
+        var pageSize = Math.Clamp(request.PageSize, 1, Pagination.MaximumPageSize);
         var where = new List<string>
         {
             "deleted_at IS NULL",
@@ -66,8 +51,7 @@ public static class EmployeeRepository
         var whereSql = string.Join(" AND ", where);
         cmd.CommandText = $"SELECT COUNT(*) FROM employees WHERE {whereSql}";
         var totalCount = Convert.ToInt64(cmd.ExecuteScalar());
-        var totalPages = Math.Max(1, (int)Math.Ceiling(totalCount / (double)pageSize));
-        var page = Math.Min(requestedPage, totalPages);
+        var page = Pagination.ClampPage(request.Page, totalCount, pageSize);
 
         cmd.Parameters.AddWithValue("$limit", pageSize);
         cmd.Parameters.AddWithValue("$offset", (page - 1) * pageSize);
@@ -82,7 +66,7 @@ public static class EmployeeRepository
         while (reader.Read())
             items.Add(Map(reader));
 
-        return new EmployeePageResult
+        return new PageResult<Employee>
         {
             Items = items,
             TotalCount = totalCount,

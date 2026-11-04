@@ -4,6 +4,7 @@ using System.Threading.Tasks;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Navigation;
+using MedSystem.App.UI;
 using MedSystem.Core.Models;
 using MedSystem.Core.Validation;
 using MedSystem.Data.Repositories;
@@ -91,7 +92,7 @@ namespace MedSystem.App.Pages
             var errors = Validators.ValidateEmployee(employee);
             if (errors.Count > 0)
             {
-                await ShowErrorsAsync(errors);
+                await Dialogs.ErrorsAsync(this, errors);
                 return;
             }
 
@@ -99,7 +100,7 @@ namespace MedSystem.App.Pages
             try
             {
                 var duplicates = await Task.Run(() => EmployeeRepository.FindDuplicates(employee));
-                if (duplicates.Count > 0 && !await ConfirmDuplicatesAsync(duplicates))
+                if (duplicates.Count > 0 && !await Dialogs.ConfirmDuplicatesAsync(this, duplicates, "Сохранить сотрудника всё равно?"))
                     return;
 
                 await Task.Run(() =>
@@ -112,7 +113,7 @@ namespace MedSystem.App.Pages
             }
             catch (Exception ex)
             {
-                await ShowErrorsAsync(new() { $"Ошибка базы данных: {ex.Message}" });
+                await Dialogs.ErrorsAsync(this, new[] { $"Ошибка базы данных: {ex.Message}" });
                 return;
             }
             finally
@@ -128,37 +129,6 @@ namespace MedSystem.App.Pages
         {
             if (Frame.CanGoBack)
                 Frame.GoBack();
-        }
-
-        private async Task ShowErrorsAsync(System.Collections.Generic.List<string> errors)
-        {
-            var dialog = new ContentDialog
-            {
-                Title = "Проверьте данные",
-                Content = string.Join("\n", errors),
-                CloseButtonText = "Понятно",
-                XamlRoot = XamlRoot,
-                RequestedTheme = ActualTheme,
-            };
-            await dialog.ShowAsync();
-        }
-
-        private async Task<bool> ConfirmDuplicatesAsync(
-            System.Collections.Generic.List<string> duplicates)
-        {
-            var dialog = new ContentDialog
-            {
-                Title = "Возможный дубликат",
-                Content = "Найдены похожие записи:\n\n"
-                    + string.Join("\n", duplicates.Select(item => $"• {item}"))
-                    + "\n\nСохранить сотрудника всё равно?",
-                PrimaryButtonText = "Сохранить всё равно",
-                CloseButtonText = "Вернуться",
-                DefaultButton = ContentDialogButton.Close,
-                XamlRoot = XamlRoot,
-                RequestedTheme = ActualTheme,
-            };
-            return await dialog.ShowAsync() == ContentDialogResult.Primary;
         }
     }
 }

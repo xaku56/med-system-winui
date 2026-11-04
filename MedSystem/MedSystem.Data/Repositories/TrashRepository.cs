@@ -1,3 +1,4 @@
+using MedSystem.Core;
 using System.Globalization;
 using Microsoft.Data.Sqlite;
 
@@ -40,7 +41,7 @@ public static class TrashRepository
     public static (List<TrashItem> Items, long TotalCount) GetPage(int page, int pageSize)
     {
         page = Math.Max(1, page);
-        pageSize = Math.Clamp(pageSize, 1, 200);
+        pageSize = Math.Clamp(pageSize, 1, Pagination.MaximumPageSize);
 
         using var conn = Db.Open();
         using var count = conn.CreateCommand();

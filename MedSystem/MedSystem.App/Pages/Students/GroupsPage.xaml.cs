@@ -7,6 +7,7 @@ using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Input;
 using Microsoft.UI.Xaml.Navigation;
+using MedSystem.App.UI;
 using MedSystem.Data.Repositories;
 
 namespace MedSystem.App.Pages
@@ -110,16 +111,10 @@ namespace MedSystem.App.Pages
                 Text = existing?.Name ?? "",
                 MaxLength = 64,
             };
-            var dialog = new ContentDialog
-            {
-                Title = existing == null ? "Новая группа" : "Переименование группы",
-                Content = box,
-                PrimaryButtonText = "Сохранить",
-                CloseButtonText = "Отмена",
-                DefaultButton = ContentDialogButton.Primary,
-                XamlRoot = XamlRoot,
-                RequestedTheme = ActualTheme,
-            };
+            var dialog = Dialogs.Create(this, existing == null ? "Новая группа" : "Переименование группы", box);
+            dialog.PrimaryButtonText = "Сохранить";
+            dialog.CloseButtonText = "Отмена";
+            dialog.DefaultButton = ContentDialogButton.Primary;
 
             if (await dialog.ShowAsync() != ContentDialogResult.Primary)
                 return;
@@ -127,7 +122,7 @@ namespace MedSystem.App.Pages
             var name = box.Text.Trim();
             if (name.Length == 0)
             {
-                await ShowMessageAsync("Ошибка", "Название группы не может быть пустым.");
+                await Dialogs.MessageAsync(this, "Ошибка", "Название группы не может быть пустым.");
                 return;
             }
 
@@ -138,13 +133,13 @@ namespace MedSystem.App.Pages
                     : GroupRepository.Update(existing.Id, name);
                 if (!saved)
                 {
-                    await ShowMessageAsync("Ошибка", $"Группа «{name}» уже существует.");
+                    await Dialogs.MessageAsync(this, "Ошибка", $"Группа «{name}» уже существует.");
                     return;
                 }
             }
             catch (Exception ex)
             {
-                await ShowMessageAsync("Не удалось сохранить группу", ex.Message);
+                await Dialogs.MessageAsync(this, "Не удалось сохранить группу", ex.Message);
                 return;
             }
 
@@ -162,28 +157,19 @@ namespace MedSystem.App.Pages
             if (row == null)
                 return;
 
-            var dialog = new ContentDialog
-            {
-                Title = "Завершить обучение группы?",
-                Content = $"Группа «{row.Name}» и её активные студенты ({row.StudentCount}) будут перемещены в архив.",
-                PrimaryButtonText = "В архив",
-                CloseButtonText = "Отмена",
-                DefaultButton = ContentDialogButton.Close,
-                XamlRoot = XamlRoot,
-                RequestedTheme = ActualTheme,
-            };
-            if (await dialog.ShowAsync() != ContentDialogResult.Primary)
+            if (!await Dialogs.ConfirmAsync(this, "Завершить обучение группы?",
+                $"Группа «{row.Name}» и её активные студенты ({row.StudentCount}) будут перемещены в архив.", "В архив"))
                 return;
 
             try
             {
                 var archivedStudents = GroupRepository.ArchiveWithStudents(id, "Выпуск");
-                await ShowMessageAsync("Группа архивирована", $"Студентов перемещено в архив: {archivedStudents}.");
+                await Dialogs.MessageAsync(this, "Группа архивирована", $"Студентов перемещено в архив: {archivedStudents}.");
                 LoadData();
             }
             catch (Exception ex)
             {
-                await ShowMessageAsync("Ошибка", ex.Message);
+                await Dialogs.MessageAsync(this, "Ошибка", ex.Message);
             }
         }
 
@@ -195,12 +181,12 @@ namespace MedSystem.App.Pages
             try
             {
                 var restoredStudents = GroupRepository.RestoreFromArchive(id);
-                await ShowMessageAsync("Группа восстановлена", $"Студентов восстановлено: {restoredStudents}.");
+                await Dialogs.MessageAsync(this, "Группа восстановлена", $"Студентов восстановлено: {restoredStudents}.");
                 LoadData();
             }
             catch (Exception ex)
             {
-                await ShowMessageAsync("Ошибка", ex.Message);
+                await Dialogs.MessageAsync(this, "Ошибка", ex.Message);
             }
         }
 
@@ -216,24 +202,14 @@ namespace MedSystem.App.Pages
             var count = GroupRepository.GetStudentCount(id);
             if (count > 0)
             {
-                await ShowMessageAsync(
+                await Dialogs.MessageAsync(this,
                     "Группа не пуста",
                     $"В группе «{row.Name}» {count} студент(ов). Сначала восстановите или переместите их отдельно.");
                 return;
             }
 
-            var dialog = new ContentDialog
-            {
-                Title = "Перемещение в корзину",
-                Content = $"Переместить группу «{row.Name}» в корзину?",
-                PrimaryButtonText = "В корзину",
-                CloseButtonText = "Отмена",
-                DefaultButton = ContentDialogButton.Close,
-                XamlRoot = XamlRoot,
-                RequestedTheme = ActualTheme,
-            };
-
-            if (await dialog.ShowAsync() == ContentDialogResult.Primary)
+            if (await Dialogs.ConfirmAsync(this, "Перемещение в корзину",
+                $"Переместить группу «{row.Name}» в корзину?", "В корзину"))
             {
                 GroupRepository.MoveToTrash(id);
                 LoadData();
@@ -244,30 +220,20 @@ namespace MedSystem.App.Pages
 
         private async void IncrementButton_Click(object sender, RoutedEventArgs e)
         {
-            var dialog = new ContentDialog
-            {
-                Title = "Перевод на следующий курс",
-                Content = "Первая цифра в названиях всех групп увеличится (например, 11-ИС-А → 21-ИС-А). Продолжить?",
-                PrimaryButtonText = "Перевести",
-                CloseButtonText = "Отмена",
-                DefaultButton = ContentDialogButton.Close,
-                XamlRoot = XamlRoot,
-                RequestedTheme = ActualTheme,
-            };
-
-            if (await dialog.ShowAsync() != ContentDialogResult.Primary)
+            if (!await Dialogs.ConfirmAsync(this, "Перевод на следующий курс",
+                "Первая цифра в названиях всех групп увеличится (например, 11-ИС-А → 21-ИС-А). Продолжить?", "Перевести"))
                 return;
 
             try
             {
                 var count = GroupRepository.IncrementFirstDigitInAllGroups();
-                await ShowMessageAsync("Готово",
+                await Dialogs.MessageAsync(this, "Готово",
                     count > 0 ? $"Обновлено групп: {count}" : "Нет подходящих групп для обновления.");
                 LoadData();
             }
             catch (Exception ex)
             {
-                await ShowMessageAsync("Ошибка", ex.Message);
+                await Dialogs.MessageAsync(this, "Ошибка", ex.Message);
             }
         }
 
@@ -275,19 +241,6 @@ namespace MedSystem.App.Pages
         {
             if (Frame.CanGoBack)
                 Frame.GoBack();
-        }
-
-        private async Task ShowMessageAsync(string title, string message)
-        {
-            var dialog = new ContentDialog
-            {
-                Title = title,
-                Content = message,
-                CloseButtonText = "Понятно",
-                XamlRoot = XamlRoot,
-                RequestedTheme = ActualTheme,
-            };
-            await dialog.ShowAsync();
         }
     }
 }

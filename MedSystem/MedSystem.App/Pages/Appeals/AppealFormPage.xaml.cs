@@ -6,6 +6,7 @@ using System.Threading.Tasks;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Navigation;
+using MedSystem.App.UI;
 using MedSystem.Core;
 using MedSystem.Core.Models;
 using MedSystem.Core.Validation;
@@ -203,7 +204,7 @@ namespace MedSystem.App.Pages
         {
             if (double.IsNaN(NumberBox.Value) || NumberBox.Value != Math.Truncate(NumberBox.Value))
             {
-                await ShowErrorsAsync(new() { "Номер обращения должен быть целым числом." });
+                await Dialogs.ErrorsAsync(this, new[] { "Номер обращения должен быть целым числом." });
                 return;
             }
 
@@ -212,7 +213,7 @@ namespace MedSystem.App.Pages
             var errors = Validators.ValidateAppeal(appeal);
             if (errors.Count > 0)
             {
-                await ShowErrorsAsync(errors);
+                await Dialogs.ErrorsAsync(this, errors);
                 return;
             }
 
@@ -225,7 +226,7 @@ namespace MedSystem.App.Pages
             }
             catch (Exception ex)
             {
-                await ShowErrorsAsync(new() { $"Ошибка базы данных: {ex.Message}" });
+                await Dialogs.ErrorsAsync(this, new[] { $"Ошибка базы данных: {ex.Message}" });
                 return;
             }
 
@@ -237,19 +238,6 @@ namespace MedSystem.App.Pages
         {
             if (Frame.CanGoBack)
                 Frame.GoBack();
-        }
-
-        private async Task ShowErrorsAsync(List<string> errors)
-        {
-            var dialog = new ContentDialog
-            {
-                Title = "Проверьте данные",
-                Content = string.Join("\n", errors),
-                CloseButtonText = "Понятно",
-                XamlRoot = XamlRoot,
-                RequestedTheme = ActualTheme,
-            };
-            await dialog.ShowAsync();
         }
     }
 }

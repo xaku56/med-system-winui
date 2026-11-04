@@ -1,14 +1,8 @@
+using MedSystem.Core;
 using MedSystem.Core.Models;
 using Microsoft.Data.Sqlite;
 
 namespace MedSystem.Data.Repositories;
-
-public sealed class IcdPageResult
-{
-    public required List<IcdCode> Items { get; init; }
-    public long TotalCount { get; init; }
-    public int Page { get; init; }
-}
 
 public static class IcdRepository
 {
@@ -35,10 +29,9 @@ public static class IcdRepository
         return result;
     }
 
-    public static IcdPageResult GetPage(string searchText, int page, int pageSize)
+    public static PageResult<IcdCode> GetPage(string searchText, int page, int pageSize)
     {
-        pageSize = Math.Clamp(pageSize, 1, 200);
-        page = Math.Max(page, 1);
+        pageSize = Math.Clamp(pageSize, 1, Pagination.MaximumPageSize);
         using var conn = Db.Open();
         using var cmd = conn.CreateCommand();
 
@@ -52,8 +45,7 @@ public static class IcdRepository
 
         cmd.CommandText = $"SELECT COUNT(*) FROM icd_codes {where}";
         var totalCount = Convert.ToInt64(cmd.ExecuteScalar());
-        var totalPages = Math.Max(1, (int)Math.Ceiling(totalCount / (double)pageSize));
-        page = Math.Min(page, totalPages);
+        page = Pagination.ClampPage(page, totalCount, pageSize);
 
         cmd.Parameters.AddWithValue("$limit", pageSize);
         cmd.Parameters.AddWithValue("$offset", (page - 1) * pageSize);
@@ -67,7 +59,7 @@ public static class IcdRepository
         var items = new List<IcdCode>(pageSize);
         while (reader.Read())
             items.Add(Map(reader));
-        return new IcdPageResult
+        return new PageResult<IcdCode>
         {
             Items = items,
             TotalCount = totalCount,

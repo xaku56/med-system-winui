@@ -5,6 +5,8 @@ using System.Threading.Tasks;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Navigation;
+using MedSystem.App.UI;
+using MedSystem.Core;
 using MedSystem.Core.Models;
 using MedSystem.Core.Validation;
 using MedSystem.Data.Repositories;
@@ -39,7 +41,7 @@ namespace MedSystem.App.Pages
         {
             base.OnNavigatedTo(e);
 
-            _rows = MedicineRepository.GetOrderCandidates(MedicinesPage.LowQuantityThreshold)
+            _rows = MedicineRepository.GetOrderCandidates(MedicineRules.LowQuantityThreshold)
                 .Select(m => new OrderRow
                 {
                     Id = m.Id,
@@ -58,7 +60,7 @@ namespace MedSystem.App.Pages
             var selected = _rows.Where(r => r.Selected).ToList();
             if (selected.Count == 0)
             {
-                await ShowMessageAsync("Заказ пуст", "Отметьте хотя бы одну позицию.");
+                await Dialogs.MessageAsync(this, "Заказ пуст", "Отметьте хотя бы одну позицию.");
                 return;
             }
 
@@ -74,7 +76,7 @@ namespace MedSystem.App.Pages
             }
             if (errors.Count > 0)
             {
-                await ShowMessageAsync("Проверьте данные", string.Join("\n", errors));
+                await Dialogs.MessageAsync(this, "Проверьте данные", string.Join("\n", errors));
                 return;
             }
 
@@ -91,7 +93,7 @@ namespace MedSystem.App.Pages
             }
             catch (Exception ex)
             {
-                await ShowMessageAsync("Ошибка базы данных", ex.Message);
+                await Dialogs.MessageAsync(this, "Ошибка базы данных", ex.Message);
                 return;
             }
 
@@ -103,19 +105,6 @@ namespace MedSystem.App.Pages
         {
             if (Frame.CanGoBack)
                 Frame.GoBack();
-        }
-
-        private async Task ShowMessageAsync(string title, string message)
-        {
-            var dialog = new ContentDialog
-            {
-                Title = title,
-                Content = message,
-                CloseButtonText = "Понятно",
-                XamlRoot = XamlRoot,
-                RequestedTheme = ActualTheme,
-            };
-            await dialog.ShowAsync();
         }
     }
 }

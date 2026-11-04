@@ -1,12 +1,13 @@
 using System;
 using System.Collections.ObjectModel;
 using System.Linq;
-using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Input;
 using Microsoft.UI.Xaml.Navigation;
+using MedSystem.App.UI;
+using MedSystem.Core;
 using MedSystem.Core.Models;
 using MedSystem.Data.Repositories;
 
@@ -23,12 +24,12 @@ namespace MedSystem.App.Pages
 
     public sealed partial class AppealsPage : Page
     {
-        private const int PageSize = 100;
+        private const int PageSize = Pagination.DefaultPageSize;
 
         private long _totalCount;
         private int _page = 1;
         private bool _isPageActive;
-        private CancellationTokenSource? _loadCancellation;
+        private readonly LatestLoad _loader = new();
         public ObservableCollection<AppealRow> Rows { get; } = new();
 
         public AppealsPage()
@@ -51,25 +52,17 @@ namespace MedSystem.App.Pages
         protected override void OnNavigatedFrom(NavigationEventArgs e)
         {
             _isPageActive = false;
-            _loadCancellation?.Cancel();
+            _loader.Cancel();
             base.OnNavigatedFrom(e);
         }
 
-        private async Task LoadDataAsync(bool debounce = false)
+        private Task LoadDataAsync(bool debounce = false)
         {
             if (!_isPageActive || SearchBox == null)
-                return;
+                return Task.CompletedTask;
 
-            _loadCancellation?.Cancel();
-            var cancellation = new CancellationTokenSource();
-            _loadCancellation = cancellation;
-
-            try
+            return _loader.RunAsync(async token =>
             {
-                if (debounce)
-                    await Task.Delay(300, cancellation.Token);
-
-                SetLoading(true);
                 ErrorBar.IsOpen = false;
                 var request = new AppealPageRequest
                 {
@@ -78,8 +71,8 @@ namespace MedSystem.App.Pages
                     PageSize = PageSize,
                 };
                 var result = await Task.Run(
-                    () => AppealRepository.GetPage(request), cancellation.Token);
-                cancellation.Token.ThrowIfCancellationRequested();
+                    () => AppealRepository.GetPage(request), token);
+                token.ThrowIfCancellationRequested();
 
                 _page = result.Page;
                 _totalCount = result.TotalCount;
@@ -87,25 +80,11 @@ namespace MedSystem.App.Pages
                 foreach (var appeal in result.Items)
                     Rows.Add(CreateRow(appeal));
                 UpdatePagination();
-            }
-            catch (OperationCanceledException)
-            {
-                // Новый запрос заменил устаревший результат.
-            }
-            catch (Exception ex)
+            }, SetLoading, ex =>
             {
                 ErrorBar.Message = $"Не удалось загрузить обращения. {ex.Message}";
                 ErrorBar.IsOpen = true;
-            }
-            finally
-            {
-                if (ReferenceEquals(_loadCancellation, cancellation))
-                {
-                    _loadCancellation = null;
-                    SetLoading(false);
-                }
-                cancellation.Dispose();
-            }
+            }, debounce ? 300 : 0);
         }
 
         private static AppealRow CreateRow(Appeal appeal) => new()
@@ -147,7 +126,7 @@ namespace MedSystem.App.Pages
 
         private void UpdatePagination()
         {
-            var totalPages = Math.Max(1, (int)Math.Ceiling(_totalCount / (double)PageSize));
+            var totalPages = Pagination.GetTotalPages(_totalCount, PageSize);
             var first = _totalCount == 0 ? 0 : (_page - 1) * PageSize + 1;
             var last = Math.Min((long)_page * PageSize, _totalCount);
             CountText.Text = $"Найдено: {_totalCount}";
@@ -176,7 +155,7 @@ namespace MedSystem.App.Pages
 
         private async void NextPageButton_Click(object sender, RoutedEventArgs e)
         {
-            var totalPages = Math.Max(1, (int)Math.Ceiling(_totalCount / (double)PageSize));
+            var totalPages = Pagination.GetTotalPages(_totalCount, PageSize);
             if (_page >= totalPages)
                 return;
             _page++;
@@ -209,18 +188,8 @@ namespace MedSystem.App.Pages
                 return;
 
             var row = Rows.FirstOrDefault(r => r.Id == id);
-            var dialog = new ContentDialog
-            {
-                Title = "Перемещение в корзину",
-                Content = $"Переместить обращение №{row?.Number} в корзину?",
-                PrimaryButtonText = "В корзину",
-                CloseButtonText = "Отмена",
-                DefaultButton = ContentDialogButton.Close,
-                XamlRoot = XamlRoot,
-                RequestedTheme = ActualTheme,
-            };
-
-            if (await dialog.ShowAsync() == ContentDialogResult.Primary)
+            if (await Dialogs.ConfirmAsync(this, "Перемещение в корзину",
+                $"Переместить обращение №{row?.Number} в корзину?", "В корзину"))
             {
                 AppealRepository.MoveToTrash(id);
                 await LoadDataAsync();

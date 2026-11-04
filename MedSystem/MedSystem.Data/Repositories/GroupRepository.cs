@@ -30,23 +30,6 @@ public static class GroupRepository
         return result;
     }
 
-    public static Group? GetById(long id)
-    {
-        using var conn = Db.Open();
-        using var cmd = conn.CreateCommand();
-        cmd.CommandText = "SELECT id, name, archive_reason FROM groups WHERE id = $id AND deleted_at IS NULL";
-        cmd.Parameters.AddWithValue("$id", id);
-        using var reader = cmd.ExecuteReader();
-        if (!reader.Read())
-            return null;
-        return new Group
-        {
-            Id = reader.GetInt64(0),
-            Name = reader.GetString(1),
-            ArchiveReason = reader.IsDBNull(2) ? "" : reader.GetString(2),
-        };
-    }
-
     /// <summary>Группы со счётчиком студентов одним запросом (без N+1).</summary>
     public static List<(Group Group, long StudentCount)> GetAllWithCounts(bool archived = false)
     {

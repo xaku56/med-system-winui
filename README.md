@@ -65,6 +65,7 @@ MedSystem/
 ├── MedSystem.App/     WinUI 3: окна, страницы, формы и MSIX
 ├── MedSystem.Core/    модели, валидация и правила контроля сроков
 ├── MedSystem.Data/    SQLite, миграции, резервные копии и репозитории
+├── MedSystem.Checks/  проверки правил и репозиториев на временной базе
 └── MedSystem.slnx     решение Visual Studio
 ```
 
@@ -77,6 +78,13 @@ MedSystem.App ──► MedSystem.Data ──► MedSystem.Core
 
 SQL-параметры используются для пользовательских значений. Операции, которые
 изменяют несколько связанных записей, выполняются в транзакциях.
+
+В `MedSystem.App/Pages` связанные страницы и формы собраны в папки `Students`
+(включая группы), `Employees`, `Medicines` (включая заказ) и `Appeals` (включая
+МКБ). Главная, настройки и корзина находятся непосредственно в `Pages`.
+Общие диалоги и управление отменой загрузок находятся в `MedSystem.App/UI`.
+Результат постраничной выборки описан общим `PageResult<T>`, а расчёт числа
+страниц и порог малого остатка лекарств определены в одном месте.
 
 ## База данных и резервные копии
 
@@ -153,6 +161,19 @@ dotnet build MedSystem/MedSystem.slnx -c Release -p:Platform=x64 -p:AppxPackageS
 dotnet format MedSystem/MedSystem.slnx --verify-no-changes --no-restore
 dotnet list MedSystem/MedSystem.slnx package --vulnerable --include-transitive
 ```
+
+Регрессионные проверки без дополнительных тестовых пакетов:
+
+```powershell
+dotnet build MedSystem/MedSystem.Checks -c Release -m:1 -p:UseSharedCompilation=false
+dotnet run --project MedSystem/MedSystem.Checks -c Release --no-build --no-restore
+```
+
+Проверки охватывают границы сроков, отмену и актуальность загрузок, поиск,
+пагинацию, дубли, архив, корзину и резервное копирование. Они создают отдельную
+временную SQLite-базу и удаляют её после выполнения; рабочая база приложения
+не используется. Проверки загрузчика используют тот же исходный файл, что и
+WinUI-приложение, и запускаются без интерфейса.
 
 ## Создание установочного пакета
 

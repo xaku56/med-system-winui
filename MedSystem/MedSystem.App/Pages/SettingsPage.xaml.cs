@@ -5,6 +5,7 @@ using System.Threading.Tasks;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Navigation;
+using MedSystem.App.UI;
 using MedSystem.Data;
 using MedSystem.Data.Repositories;
 using Windows.Storage.Pickers;
@@ -57,7 +58,7 @@ namespace MedSystem.App.Pages
                 (double.IsNaN(TrashRetentionBox.Value) ||
                  TrashRetentionBox.Value != Math.Truncate(TrashRetentionBox.Value)))
             {
-                await ShowMessageAsync("Проверьте срок хранения", "Количество дней должно быть целым числом.");
+                await Dialogs.MessageAsync(this, "Проверьте срок хранения", "Количество дней должно быть целым числом.");
                 return;
             }
 
@@ -68,7 +69,7 @@ namespace MedSystem.App.Pages
             try
             {
                 TrashRepository.SetRetentionDays(retentionDays);
-                await ShowMessageAsync(
+                await Dialogs.MessageAsync(this,
                     "Настройки сохранены",
                     retentionDays == 0
                         ? "Автоматическая очистка корзины отключена."
@@ -76,7 +77,7 @@ namespace MedSystem.App.Pages
             }
             catch (Exception ex)
             {
-                await ShowMessageAsync("Не удалось сохранить настройку", ex.Message);
+                await Dialogs.MessageAsync(this, "Не удалось сохранить настройку", ex.Message);
             }
         }
 
@@ -111,11 +112,11 @@ namespace MedSystem.App.Pages
             {
                 await Task.Run(() => BackupService.CreateManualBackup(file.Path));
                 UpdateBackupStatus();
-                await ShowMessageAsync("Резервная копия создана", $"Копия сохранена:\n{file.Path}");
+                await Dialogs.MessageAsync(this, "Резервная копия создана", $"Копия сохранена:\n{file.Path}");
             }
             catch (Exception ex)
             {
-                await ShowMessageAsync("Не удалось создать копию", ex.Message);
+                await Dialogs.MessageAsync(this, "Не удалось создать копию", ex.Message);
             }
             finally
             {
@@ -133,31 +134,22 @@ namespace MedSystem.App.Pages
             if (file == null)
                 return;
 
-            var confirmation = new ContentDialog
-            {
-                Title = "Восстановить базу данных?",
-                Content = "Текущая база будет сохранена в страховочную копию, затем заменена выбранной. После восстановления приложение закроется.",
-                PrimaryButtonText = "Восстановить",
-                CloseButtonText = "Отмена",
-                DefaultButton = ContentDialogButton.Close,
-                XamlRoot = XamlRoot,
-                RequestedTheme = ActualTheme,
-            };
-            if (await confirmation.ShowAsync() != ContentDialogResult.Primary)
+            if (!await Dialogs.ConfirmAsync(this, "Восстановить базу данных?",
+                "Текущая база будет сохранена в страховочную копию, затем заменена выбранной. После восстановления приложение закроется.", "Восстановить"))
                 return;
 
             SetBackupBusy(true);
             try
             {
                 var safetyBackup = await Task.Run(() => BackupService.RestoreBackup(file.Path));
-                await ShowMessageAsync(
+                await Dialogs.MessageAsync(this,
                     "База восстановлена",
                     $"Перед восстановлением создана страховочная копия:\n{safetyBackup}\n\nПриложение сейчас закроется. Запустите его снова.");
                 App.CurrentWindow?.Close();
             }
             catch (Exception ex)
             {
-                await ShowMessageAsync("Не удалось восстановить базу", ex.Message);
+                await Dialogs.MessageAsync(this, "Не удалось восстановить базу", ex.Message);
             }
             finally
             {
@@ -188,19 +180,6 @@ namespace MedSystem.App.Pages
 
             var windowHandle = WinRT.Interop.WindowNative.GetWindowHandle(App.CurrentWindow);
             WinRT.Interop.InitializeWithWindow.Initialize(picker, windowHandle);
-        }
-
-        private async Task ShowMessageAsync(string title, string message)
-        {
-            var dialog = new ContentDialog
-            {
-                Title = title,
-                Content = message,
-                CloseButtonText = "Понятно",
-                XamlRoot = XamlRoot,
-                RequestedTheme = ActualTheme,
-            };
-            await dialog.ShowAsync();
         }
     }
 }

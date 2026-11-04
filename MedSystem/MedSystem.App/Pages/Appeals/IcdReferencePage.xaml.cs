@@ -1,33 +1,28 @@
 using System;
 using System.Collections.ObjectModel;
 using System.Linq;
-using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Input;
 using Microsoft.UI.Xaml.Navigation;
+using MedSystem.App.UI;
+using MedSystem.Core;
 using MedSystem.Core.Models;
 using MedSystem.Data.Repositories;
 
 namespace MedSystem.App.Pages
 {
-    public class IcdRow
-    {
-        public string Code { get; set; } = "";
-        public string Name { get; set; } = "";
-    }
-
     /// <summary>Справочник кодов МКБ: просмотр, добавление, изменение, удаление.</summary>
     public sealed partial class IcdReferencePage : Page
     {
-        private const int PageSize = 100;
+        private const int PageSize = Pagination.DefaultPageSize;
 
         private long _totalCount;
         private int _page = 1;
         private bool _isPageActive;
-        private CancellationTokenSource? _loadCancellation;
-        public ObservableCollection<IcdRow> Rows { get; } = new();
+        private readonly LatestLoad _loader = new();
+        public ObservableCollection<IcdCode> Rows { get; } = new();
 
         public IcdReferencePage()
         {
@@ -49,65 +44,37 @@ namespace MedSystem.App.Pages
         protected override void OnNavigatedFrom(NavigationEventArgs e)
         {
             _isPageActive = false;
-            _loadCancellation?.Cancel();
+            _loader.Cancel();
             base.OnNavigatedFrom(e);
         }
 
-        private async Task LoadDataAsync(bool debounce = false)
+        private Task LoadDataAsync(bool debounce = false)
         {
             if (!_isPageActive || SearchBox == null)
-                return;
+                return Task.CompletedTask;
 
-            _loadCancellation?.Cancel();
-            var cancellation = new CancellationTokenSource();
-            _loadCancellation = cancellation;
-
-            try
+            return _loader.RunAsync(async token =>
             {
-                if (debounce)
-                    await Task.Delay(300, cancellation.Token);
-
-                SetLoading(true);
                 ErrorBar.IsOpen = false;
                 var searchText = SearchBox.Text ?? "";
                 var requestedPage = _page;
                 var result = await Task.Run(
                     () => IcdRepository.GetPage(searchText, requestedPage, PageSize),
-                    cancellation.Token);
-                cancellation.Token.ThrowIfCancellationRequested();
+                    token);
+                token.ThrowIfCancellationRequested();
 
                 _page = result.Page;
                 _totalCount = result.TotalCount;
                 Rows.Clear();
                 foreach (var code in result.Items)
-                    Rows.Add(CreateRow(code));
+                    Rows.Add(code);
                 UpdatePagination();
-            }
-            catch (OperationCanceledException)
-            {
-                // Новый запрос заменил устаревший результат.
-            }
-            catch (Exception ex)
+            }, SetLoading, ex =>
             {
                 ErrorBar.Message = $"Не удалось загрузить справочник МКБ. {ex.Message}";
                 ErrorBar.IsOpen = true;
-            }
-            finally
-            {
-                if (ReferenceEquals(_loadCancellation, cancellation))
-                {
-                    _loadCancellation = null;
-                    SetLoading(false);
-                }
-                cancellation.Dispose();
-            }
+            }, debounce ? 300 : 0);
         }
-
-        private static IcdRow CreateRow(IcdCode code) => new()
-        {
-            Code = code.Code,
-            Name = code.Name,
-        };
 
         private void SetLoading(bool isLoading)
         {
@@ -126,7 +93,7 @@ namespace MedSystem.App.Pages
 
         private void UpdatePagination()
         {
-            var totalPages = Math.Max(1, (int)Math.Ceiling(_totalCount / (double)PageSize));
+            var totalPages = Pagination.GetTotalPages(_totalCount, PageSize);
             var first = _totalCount == 0 ? 0 : (_page - 1) * PageSize + 1;
             var last = Math.Min((long)_page * PageSize, _totalCount);
             CountText.Text = $"Найдено: {_totalCount}";
@@ -155,7 +122,7 @@ namespace MedSystem.App.Pages
 
         private async void NextPageButton_Click(object sender, RoutedEventArgs e)
         {
-            var totalPages = Math.Max(1, (int)Math.Ceiling(_totalCount / (double)PageSize));
+            var totalPages = Pagination.GetTotalPages(_totalCount, PageSize);
             if (_page >= totalPages)
                 return;
             _page++;
@@ -169,7 +136,7 @@ namespace MedSystem.App.Pages
 
         private void IcdList_DoubleTapped(object sender, DoubleTappedRoutedEventArgs e)
         {
-            if (IcdList.SelectedItem is IcdRow row)
+            if (IcdList.SelectedItem is IcdCode row)
                 _ = ShowEditDialogAsync(row);
         }
 
@@ -183,7 +150,7 @@ namespace MedSystem.App.Pages
             }
         }
 
-        private async Task ShowEditDialogAsync(IcdRow? existing)
+        private async Task ShowEditDialogAsync(IcdCode? existing)
         {
             var codeBox = new TextBox
             {
@@ -202,16 +169,10 @@ namespace MedSystem.App.Pages
             panel.Children.Add(codeBox);
             panel.Children.Add(nameBox);
 
-            var dialog = new ContentDialog
-            {
-                Title = existing == null ? "Новый код МКБ" : "Изменение кода МКБ",
-                Content = panel,
-                PrimaryButtonText = "Сохранить",
-                CloseButtonText = "Отмена",
-                DefaultButton = ContentDialogButton.Primary,
-                XamlRoot = XamlRoot,
-                RequestedTheme = ActualTheme,
-            };
+            var dialog = Dialogs.Create(this, existing == null ? "Новый код МКБ" : "Изменение кода МКБ", panel);
+            dialog.PrimaryButtonText = "Сохранить";
+            dialog.CloseButtonText = "Отмена";
+            dialog.DefaultButton = ContentDialogButton.Primary;
 
             if (await dialog.ShowAsync() != ContentDialogResult.Primary)
                 return;
@@ -220,7 +181,7 @@ namespace MedSystem.App.Pages
             var name = nameBox.Text.Trim();
             if (code.Length == 0 || name.Length == 0)
             {
-                await ShowMessageAsync("Ошибка", "Код и наименование не могут быть пустыми.");
+                await Dialogs.MessageAsync(this, "Ошибка", "Код и наименование не могут быть пустыми.");
                 return;
             }
 
@@ -233,13 +194,13 @@ namespace MedSystem.App.Pages
             }
             catch (Exception ex)
             {
-                await ShowMessageAsync("Не удалось сохранить код МКБ", ex.Message);
+                await Dialogs.MessageAsync(this, "Не удалось сохранить код МКБ", ex.Message);
                 return;
             }
 
             if (!ok)
             {
-                await ShowMessageAsync("Ошибка", $"Код «{code}» уже существует в справочнике.");
+                await Dialogs.MessageAsync(this, "Ошибка", $"Код «{code}» уже существует в справочнике.");
                 return;
             }
 
@@ -253,18 +214,8 @@ namespace MedSystem.App.Pages
             if (sender is not FrameworkElement { Tag: string code })
                 return;
 
-            var dialog = new ContentDialog
-            {
-                Title = "Удаление",
-                Content = $"Удалить код «{code}» из справочника?",
-                PrimaryButtonText = "Удалить",
-                CloseButtonText = "Отмена",
-                DefaultButton = ContentDialogButton.Close,
-                XamlRoot = XamlRoot,
-                RequestedTheme = ActualTheme,
-            };
-
-            if (await dialog.ShowAsync() == ContentDialogResult.Primary)
+            if (await Dialogs.ConfirmAsync(this, "Удаление",
+                $"Удалить код «{code}» из справочника?", "Удалить"))
             {
                 try
                 {
@@ -273,7 +224,7 @@ namespace MedSystem.App.Pages
                 }
                 catch (Exception ex)
                 {
-                    await ShowMessageAsync("Не удалось удалить код МКБ", ex.Message);
+                    await Dialogs.MessageAsync(this, "Не удалось удалить код МКБ", ex.Message);
                 }
             }
         }
@@ -282,19 +233,6 @@ namespace MedSystem.App.Pages
         {
             if (Frame.CanGoBack)
                 Frame.GoBack();
-        }
-
-        private async Task ShowMessageAsync(string title, string message)
-        {
-            var dialog = new ContentDialog
-            {
-                Title = title,
-                Content = message,
-                CloseButtonText = "Понятно",
-                XamlRoot = XamlRoot,
-                RequestedTheme = ActualTheme,
-            };
-            await dialog.ShowAsync();
         }
     }
 }

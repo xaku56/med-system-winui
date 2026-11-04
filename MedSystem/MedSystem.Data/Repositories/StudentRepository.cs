@@ -1,3 +1,4 @@
+using MedSystem.Core;
 using MedSystem.Core.Models;
 
 namespace MedSystem.Data.Repositories;
@@ -10,30 +11,14 @@ public sealed class StudentPageRequest
     public int StatusFilter { get; init; }
     public bool Archived { get; init; }
     public int Page { get; init; } = 1;
-    public int PageSize { get; init; } = 100;
-}
-
-public sealed class StudentPageResult
-{
-    public required List<Student> Items { get; init; }
-    public long TotalCount { get; init; }
-    public int Page { get; init; }
+    public int PageSize { get; init; } = Pagination.DefaultPageSize;
 }
 
 public static class StudentRepository
 {
-    public static long Count()
+    public static PageResult<Student> GetPage(StudentPageRequest request)
     {
-        using var conn = Db.Open();
-        using var cmd = conn.CreateCommand();
-        cmd.CommandText = "SELECT COUNT(*) FROM students WHERE deleted_at IS NULL AND archived_at IS NULL";
-        return Convert.ToInt64(cmd.ExecuteScalar());
-    }
-
-    public static StudentPageResult GetPage(StudentPageRequest request)
-    {
-        var pageSize = Math.Clamp(request.PageSize, 1, 200);
-        var requestedPage = Math.Max(request.Page, 1);
+        var pageSize = Math.Clamp(request.PageSize, 1, Pagination.MaximumPageSize);
         var where = new List<string>
         {
             "s.deleted_at IS NULL",
@@ -79,8 +64,7 @@ public static class StudentRepository
         var whereSql = string.Join(" AND ", where);
         cmd.CommandText = $"SELECT COUNT(*) FROM students s LEFT JOIN groups g ON s.group_id = g.id WHERE {whereSql}";
         var totalCount = Convert.ToInt64(cmd.ExecuteScalar());
-        var totalPages = Math.Max(1, (int)Math.Ceiling(totalCount / (double)pageSize));
-        var page = Math.Min(requestedPage, totalPages);
+        var page = Pagination.ClampPage(request.Page, totalCount, pageSize);
 
         cmd.Parameters.AddWithValue("$limit", pageSize);
         cmd.Parameters.AddWithValue("$offset", (page - 1) * pageSize);
@@ -101,7 +85,7 @@ public static class StudentRepository
         while (reader.Read())
             items.Add(ReadStudent(reader));
 
-        return new StudentPageResult
+        return new PageResult<Student>
         {
             Items = items,
             TotalCount = totalCount,
