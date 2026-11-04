@@ -192,28 +192,31 @@ namespace MedSystem.App.Pages
 
         private async void DeleteMenuItem_Click(object sender, RoutedEventArgs e)
         {
-            if (sender is not FrameworkElement { Tag: long id })
-                return;
-
-            var row = Rows.FirstOrDefault(r => r.Id == id);
-            if (row == null)
-                return;
-
-            var count = GroupRepository.GetStudentCount(id);
-            if (count > 0)
+            await RecordAction.RunAsync(async () =>
             {
-                await Dialogs.MessageAsync(this,
-                    "Группа не пуста",
-                    $"В группе «{row.Name}» {count} студент(ов). Сначала восстановите или переместите их отдельно.");
-                return;
-            }
+                if (sender is not FrameworkElement { Tag: long id })
+                    return;
 
-            if (await Dialogs.ConfirmAsync(this, "Перемещение в корзину",
-                $"Переместить группу «{row.Name}» в корзину?", "В корзину"))
-            {
-                GroupRepository.MoveToTrash(id);
-                LoadData();
-            }
+                var row = Rows.FirstOrDefault(r => r.Id == id);
+                if (row == null)
+                    return;
+
+                var count = GroupRepository.GetStudentCount(id);
+                if (count > 0)
+                {
+                    await Dialogs.MessageAsync(this,
+                        "Группа не пуста",
+                        $"В группе «{row.Name}» {count} студент(ов). Сначала восстановите или переместите их отдельно.");
+                    return;
+                }
+
+                if (await Dialogs.ConfirmAsync(this, "Перемещение в корзину",
+                    $"Переместить группу «{row.Name}» в корзину?", "В корзину"))
+                {
+                    GroupRepository.MoveToTrash(id);
+                    LoadData();
+                }
+            }, ex => Dialogs.MessageAsync(this, "Не удалось переместить группу в корзину", ex.Message));
         }
 
         // ── Перевод на следующий курс ────────────────────────────────

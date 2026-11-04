@@ -71,6 +71,19 @@ Check(applied.SequenceEqual([2]) && errors.Count == 0, "navigation cancels pendi
 await loader.RunAsync(_ => throw new InvalidOperationException("read failure"), loading.Add, errors.Add);
 Check(errors.Count == 1 && !loading.Last(), "load errors are reported and indicator reset");
 
+Exception? actionError = null;
+Task ReportActionError(Exception ex)
+{
+    actionError = ex;
+    return Task.CompletedTask;
+}
+await RecordAction.RunAsync(async () =>
+{
+    await Task.Yield();
+    throw new InvalidOperationException("async action failure");
+}, ReportActionError);
+Check(actionError?.Message == "async action failure", "asynchronous record action failures are reported");
+
 var directory = Path.GetFullPath(Path.Combine(Path.GetTempPath(), $"MedSystem.Checks-{Guid.NewGuid():N}"));
 var originalDbPath = Db.DbPath;
 Directory.CreateDirectory(directory);
@@ -164,6 +177,77 @@ try
     Check(TrashRepository.GetPage(1, 100).TotalCount == 2, "trash contains deleted entities");
     TrashRepository.SetRetentionDays(0);
     Check(TrashRepository.PurgeExpired() == 0, "automatic trash cleanup can be disabled");
+
+    var testDbPath = Db.DbPath;
+    Db.DbPath = Path.Combine(directory, "missing", "checks.db");
+    (string Name, Action Run)[] unavailableActions =
+    [
+        ("archive student", () => StudentRepository.Archive(student.Id, "Перевод")),
+        ("restore student", () => StudentRepository.RestoreFromArchive(student.Id)),
+        ("trash student", () => StudentRepository.MoveToTrash(student.Id)),
+        ("archive employee", () => EmployeeRepository.Archive(employee.Id, "Перевод")),
+        ("restore employee", () => EmployeeRepository.RestoreFromArchive(employee.Id)),
+        ("trash employee", () => EmployeeRepository.MoveToTrash(employee.Id)),
+        ("trash medicine", () => MedicineRepository.MoveToTrash(medicines[0].Id)),
+        ("trash appeal", () => AppealRepository.MoveToTrash(appeal.Id)),
+        ("check group before trash", () => GroupRepository.GetStudentCount(groupId)),
+        ("trash group", () => GroupRepository.MoveToTrash(groupId)),
+    ];
+    foreach (var (name, run) in unavailableActions)
+    {
+        actionError = null;
+        var refreshed = false;
+        await RecordAction.RunAsync(() =>
+        {
+            run();
+            refreshed = true;
+            return Task.CompletedTask;
+        }, ReportActionError);
+        Check(actionError is SqliteException && !refreshed, $"{name}: database failure is reported without refreshing rows");
+    }
+    Db.DbPath = testDbPath;
+
+    using (var connection = Db.Open())
+    using (var command = connection.CreateCommand())
+    {
+        command.CommandText = """
+            CREATE TRIGGER checks_reject_archive BEFORE UPDATE OF archived_at ON students
+            BEGIN SELECT RAISE(ABORT, 'simulated write failure'); END
+            """;
+        command.ExecuteNonQuery();
+    }
+    actionError = null;
+    var activeStudents = StudentRepository.GetPage(new()).TotalCount;
+    var refreshCount = 0;
+    Task ArchiveStudent()
+    {
+        StudentRepository.Archive(student.Id, "Перевод");
+        refreshCount++;
+        return Task.CompletedTask;
+    }
+    await RecordAction.RunAsync(ArchiveStudent, ReportActionError);
+    Check(actionError is SqliteException && refreshCount == 0
+        && StudentRepository.GetPage(new()).TotalCount == activeStudents, "failed write preserves student and visible list");
+    using (var connection = Db.Open())
+    using (var command = connection.CreateCommand())
+    {
+        command.CommandText = "DROP TRIGGER checks_reject_archive";
+        command.ExecuteNonQuery();
+    }
+    actionError = null;
+    await RecordAction.RunAsync(ArchiveStudent, ReportActionError);
+    Check(actionError is null && refreshCount == 1
+        && StudentRepository.GetPage(new() { Archived = true }).TotalCount == 1, "record action can be retried successfully after a failure");
+    StudentRepository.RestoreFromArchive(student.Id);
+
+    actionError = null;
+    await RecordAction.RunAsync(() =>
+    {
+        GroupRepository.MoveToTrash(groupId);
+        return Task.CompletedTask;
+    }, ReportActionError);
+    Check(actionError is InvalidOperationException && GroupRepository.GetStudentCount(groupId) > 0,
+        "nonempty group error is reported and related students remain available");
 
     var backup = BackupService.CreateManualBackup(Path.Combine(directory, "backup.db"));
     BackupService.ValidateBackup(backup);

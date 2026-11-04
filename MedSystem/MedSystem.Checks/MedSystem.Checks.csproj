@@ -8,5 +8,6 @@
   <ItemGroup>
     <ProjectReference Include="..\MedSystem.Data\MedSystem.Data.csproj" />
     <Compile Include="..\MedSystem.App\UI\LatestLoad.cs" Link="LatestLoad.cs" />
+    <Compile Include="..\MedSystem.App\UI\RecordAction.cs" Link="RecordAction.cs" />
   </ItemGroup>
 </Project>

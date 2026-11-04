@@ -184,16 +184,19 @@ namespace MedSystem.App.Pages
 
         private async void DeleteMenuItem_Click(object sender, RoutedEventArgs e)
         {
-            if (sender is not FrameworkElement { Tag: long id })
-                return;
-
-            var row = Rows.FirstOrDefault(r => r.Id == id);
-            if (await Dialogs.ConfirmAsync(this, "Перемещение в корзину",
-                $"Переместить обращение №{row?.Number} в корзину?", "В корзину"))
+            await RecordAction.RunAsync(async () =>
             {
-                AppealRepository.MoveToTrash(id);
-                await LoadDataAsync();
-            }
+                if (sender is not FrameworkElement { Tag: long id })
+                    return;
+
+                var row = Rows.FirstOrDefault(r => r.Id == id);
+                if (await Dialogs.ConfirmAsync(this, "Перемещение в корзину",
+                    $"Переместить обращение №{row?.Number} в корзину?", "В корзину"))
+                {
+                    AppealRepository.MoveToTrash(id);
+                    await LoadDataAsync();
+                }
+            }, ex => Dialogs.MessageAsync(this, "Не удалось переместить обращение в корзину", ex.Message));
         }
     }
 }

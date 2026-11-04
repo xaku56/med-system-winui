@@ -324,39 +324,48 @@ namespace MedSystem.App.Pages
 
         private async void ArchiveMenuItem_Click(object sender, RoutedEventArgs e)
         {
-            if (sender is not FrameworkElement { Tag: long id })
-                return;
-
-            var reason = await Dialogs.ArchiveReasonAsync(this, "Архивировать студента?",
-                new[] { "Не указано", "Выпуск", "Отчисление", "Перевод", "Другое" });
-            if (reason != null)
+            await RecordAction.RunAsync(async () =>
             {
-                StudentRepository.Archive(id, reason);
-                await LoadDataAsync();
-            }
+                if (sender is not FrameworkElement { Tag: long id })
+                    return;
+
+                var reason = await Dialogs.ArchiveReasonAsync(this, "Архивировать студента?",
+                    new[] { "Не указано", "Выпуск", "Отчисление", "Перевод", "Другое" });
+                if (reason != null)
+                {
+                    StudentRepository.Archive(id, reason);
+                    await LoadDataAsync();
+                }
+            }, ex => Dialogs.MessageAsync(this, "Не удалось архивировать студента", ex.Message));
         }
 
         private async void RestoreArchiveMenuItem_Click(object sender, RoutedEventArgs e)
         {
-            if (sender is FrameworkElement { Tag: long id })
+            await RecordAction.RunAsync(async () =>
             {
-                StudentRepository.RestoreFromArchive(id);
-                await LoadDataAsync();
-            }
+                if (sender is FrameworkElement { Tag: long id })
+                {
+                    StudentRepository.RestoreFromArchive(id);
+                    await LoadDataAsync();
+                }
+            }, ex => Dialogs.MessageAsync(this, "Не удалось восстановить студента из архива", ex.Message));
         }
 
         private async void DeleteMenuItem_Click(object sender, RoutedEventArgs e)
         {
-            if (sender is not FrameworkElement { Tag: long id })
-                return;
-
-            var row = Rows.FirstOrDefault(r => r.Id == id);
-            if (await Dialogs.ConfirmAsync(this, "Перемещение в корзину",
-                $"Переместить студента «{row?.FullName}» в корзину?", "В корзину"))
+            await RecordAction.RunAsync(async () =>
             {
-                StudentRepository.MoveToTrash(id);
-                await LoadDataAsync();
-            }
+                if (sender is not FrameworkElement { Tag: long id })
+                    return;
+
+                var row = Rows.FirstOrDefault(r => r.Id == id);
+                if (await Dialogs.ConfirmAsync(this, "Перемещение в корзину",
+                    $"Переместить студента «{row?.FullName}» в корзину?", "В корзину"))
+                {
+                    StudentRepository.MoveToTrash(id);
+                    await LoadDataAsync();
+                }
+            }, ex => Dialogs.MessageAsync(this, "Не удалось переместить студента в корзину", ex.Message));
         }
     }
 }
