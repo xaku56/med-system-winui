@@ -65,7 +65,7 @@
          на любом компьютере. Release-пакет подписывается сертификатом с этим отпечатком. -->
     <AppxPackageSigningEnabled Condition="'$(Configuration)' == 'Debug'">False</AppxPackageSigningEnabled>
     <AppxPackageSigningEnabled Condition="'$(Configuration)' != 'Debug'">True</AppxPackageSigningEnabled>
-    <PackageCertificateThumbprint>AFAA43D412B9C3977D2489F0CACB1F5BD628DF56</PackageCertificateThumbprint>
+    <PackageCertificateThumbprint>D84FE72EEFE070710CB7A94E18B0111A76FEE675</PackageCertificateThumbprint>
     <AppxPackageSigningTimestampDigestAlgorithm>SHA256</AppxPackageSigningTimestampDigestAlgorithm>
     <AppxAutoIncrementPackageRevision>False</AppxAutoIncrementPackageRevision>
     <AppxSymbolPackageEnabled>False</AppxSymbolPackageEnabled>
