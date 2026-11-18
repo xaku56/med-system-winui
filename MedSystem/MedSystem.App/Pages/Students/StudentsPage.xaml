@@ -70,7 +70,7 @@
                     <RowDefinition Height="Auto" />
                     <RowDefinition Height="*" />
                 </Grid.RowDefinitions>
-                <Grid Grid.Row="0" Padding="16,12,16,10">
+                <Grid Grid.Row="0" Padding="24,12,20,10">
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="2*" />
                         <ColumnDefinition Width="*" />
@@ -123,11 +123,11 @@
                                 </StackPanel>
                                 <TextBlock Grid.Column="1" Text="{x:Bind GroupName}" Opacity="0.8" VerticalAlignment="Center" />
                                 <Border Grid.Column="2" Background="{x:Bind MedicalExamBg}" CornerRadius="4"
-                                        Padding="10,2" HorizontalAlignment="Left" VerticalAlignment="Center">
+                                        Padding="10,2" Margin="-10,0,0,0" HorizontalAlignment="Left" VerticalAlignment="Center">
                                     <TextBlock Text="{x:Bind MedicalExam}" Foreground="{x:Bind MedicalExamFg}" FontSize="12" />
                                 </Border>
                                 <Border Grid.Column="3" Background="{x:Bind FluorographyBg}" CornerRadius="4"
-                                        Padding="10,2" HorizontalAlignment="Left" VerticalAlignment="Center">
+                                        Padding="10,2" Margin="-10,0,0,0" HorizontalAlignment="Left" VerticalAlignment="Center">
                                     <TextBlock Text="{x:Bind Fluorography}" Foreground="{x:Bind FluorographyFg}" FontSize="12" />
                                 </Border>
                                 <TextBlock Grid.Column="4" Text="{x:Bind Dispensary}" Opacity="0.8"

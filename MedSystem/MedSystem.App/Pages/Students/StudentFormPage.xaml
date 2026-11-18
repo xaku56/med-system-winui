@@ -65,10 +65,10 @@
 
                 <Grid ColumnSpacing="12">
                     <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="*" />
                         <ColumnDefinition Width="*" />
                     </Grid.ColumnDefinitions>
-                    <ToggleSwitch x:Name="DispensaryToggle" Grid.Column="0" MinWidth="200"
+                    <ToggleSwitch x:Name="DispensaryToggle" Grid.Column="0"
                                   Header="Диспансерный учёт" OnContent="Да" OffContent="Нет"
                                   Toggled="DispensaryToggle_Toggled" />
                     <TextBox x:Name="DispensaryDetailsBox" Grid.Column="1"
