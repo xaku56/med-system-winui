@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
@@ -14,11 +15,21 @@ using MedSystem.Data.Repositories;
 
 namespace MedSystem.App.Pages
 {
+    /// <summary>Параметр навигации: новое обращение из карточки студента.</summary>
+    public sealed class NewAppealForStudent
+    {
+        public long StudentId { get; init; }
+    }
+
     /// <summary>Форма добавления/редактирования обращения.
-    /// Параметр навигации: long id; 0 — новое.</summary>
+    /// Параметр навигации: long id (0 — новое) или <see cref="NewAppealForStudent"/>.</summary>
     public sealed partial class AppealFormPage : Page
     {
+        private static readonly CultureInfo Russian = CultureInfo.GetCultureInfo("ru-RU");
+
         private long _appealId;
+        /// <summary>Студент, к карточке которого относится обращение.</summary>
+        private long? _studentId;
         private CancellationTokenSource? _personSearchCancellation;
         private CancellationTokenSource? _diagnosisSearchCancellation;
 
@@ -43,7 +54,18 @@ namespace MedSystem.App.Pages
             {
                 NumberBox.Value = AppealRepository.GetNextNumber();
                 CreatedAtBox.Text = DateTime.Now.ToString(ExpirationRules.DateFormat);
+                CreatedTimeBox.PlaceholderText = "при сохранении";
+
+                if (e.Parameter is NewAppealForStudent { StudentId: > 0 } request
+                    && StudentRepository.GetById(request.StudentId) is { } student)
+                {
+                    SenderBox.Text = student.FullName;
+                    BirthDateBox.Text = student.BirthDate;
+                    GroupNameBox.Text = student.GroupName;
+                    _studentId = student.Id;
+                }
             }
+            UpdateStudentLinkText();
         }
 
         protected override void OnNavigatedFrom(NavigationEventArgs e)
@@ -57,34 +79,90 @@ namespace MedSystem.App.Pages
         {
             NumberBox.Value = a.Number;
             CreatedAtBox.Text = a.CreatedAt;
+            CreatedTimeBox.Text = a.CreatedTime;
             SenderBox.Text = a.Sender;
+            _studentId = a.StudentId;
             BirthDateBox.Text = a.BirthDate;
             ParentPhoneBox.Text = a.ParentPhone;
             GroupNameBox.Text = a.GroupName;
             ComplaintsBox.Text = a.Complaints;
+            HeightBox.Text = a.HeightCm?.ToString(CultureInfo.InvariantCulture) ?? "";
+            WeightBox.Text = a.WeightKg?.ToString("0.#", Russian) ?? "";
+            TemperatureBox.Text = a.Temperature?.ToString("0.0", Russian) ?? "";
+            BloodPressureSystolicBox.Text = a.BloodPressureSystolic?.ToString(CultureInfo.InvariantCulture) ?? "";
+            BloodPressureDiastolicBox.Text = a.BloodPressureDiastolic?.ToString(CultureInfo.InvariantCulture) ?? "";
+            PulseBox.Text = a.Pulse?.ToString(CultureInfo.InvariantCulture) ?? "";
+            SaturationBox.Text = a.Saturation?.ToString(CultureInfo.InvariantCulture) ?? "";
             DiagnosisBox.Text = a.Diagnosis;
             ActionsBox.Text = a.ActionsRecommendations;
+            AmbulanceCheckBox.IsChecked = a.AmbulanceCalled;
         }
 
-        private Appeal CollectForm() => new()
+        /// <summary>Собирает форму; ошибки разбора чисел добавляются в <paramref name="errors"/>.</summary>
+        private Appeal CollectForm(List<string> errors)
         {
-            Id = _appealId,
-            Number = double.IsNaN(NumberBox.Value) ? 0 : (long)NumberBox.Value,
-            CreatedAt = CreatedAtBox.Text.Trim(),
-            Sender = StripPersonSuffix(SenderBox.Text.Trim()),
-            BirthDate = BirthDateBox.Text.Trim(),
-            ParentPhone = ParentPhoneBox.Text.Trim(),
-            GroupName = GroupNameBox.Text.Trim(),
-            Complaints = ComplaintsBox.Text.Trim(),
-            Diagnosis = DiagnosisBox.Text.Trim(),
-            ActionsRecommendations = ActionsBox.Text.Trim(),
-        };
+            var appeal = new Appeal
+            {
+                Id = _appealId,
+                Number = double.IsNaN(NumberBox.Value) ? 0 : (long)NumberBox.Value,
+                CreatedAt = CreatedAtBox.Text.Trim(),
+                CreatedTime = CreatedTimeBox.Text.Trim(),
+                StudentId = _studentId,
+                Sender = StripPersonSuffix(SenderBox.Text.Trim()),
+                BirthDate = BirthDateBox.Text.Trim(),
+                ParentPhone = ParentPhoneBox.Text.Trim(),
+                GroupName = GroupNameBox.Text.Trim(),
+                Complaints = ComplaintsBox.Text.Trim(),
+                HeightCm = ReadInteger(HeightBox, "Рост, см", errors),
+                WeightKg = ReadNumber(WeightBox, "Вес, кг", errors),
+                Temperature = ReadNumber(TemperatureBox, "Температура, °C", errors),
+                BloodPressureSystolic = ReadInteger(BloodPressureSystolicBox, "Давление: верхнее", errors),
+                BloodPressureDiastolic = ReadInteger(BloodPressureDiastolicBox, "Давление: нижнее", errors),
+                Pulse = ReadInteger(PulseBox, "Пульс, уд/мин", errors),
+                Saturation = ReadInteger(SaturationBox, "Сатурация, %", errors),
+                Diagnosis = DiagnosisBox.Text.Trim(),
+                ActionsRecommendations = ActionsBox.Text.Trim(),
+                AmbulanceCalled = AmbulanceCheckBox.IsChecked == true,
+            };
+
+            // Новое обращение без указанного вручную времени получает время сохранения.
+            // У старых записей пустое время не подменяется временем редактирования.
+            if (_appealId == 0 && appeal.CreatedTime.Length == 0)
+                appeal.CreatedTime = DateTime.Now.ToString(Validators.TimeFormat, CultureInfo.InvariantCulture);
+
+            return appeal;
+        }
+
+        private static int? ReadInteger(TextBox box, string label, List<string> errors)
+        {
+            if (Validators.TryParseOptionalInteger(box.Text, out var value))
+                return value;
+            errors.Add($"Поле '{label}' должно быть целым числом.");
+            return null;
+        }
+
+        private static double? ReadNumber(TextBox box, string label, List<string> errors)
+        {
+            if (Validators.TryParseOptionalNumber(box.Text, out var value))
+                return value;
+            errors.Add($"Поле '{label}' должно быть числом.");
+            return null;
+        }
 
         /// <summary>«Иванов Пётр (Группа 11-ИС-А)» → «Иванов Пётр».</summary>
         private static string StripPersonSuffix(string value)
         {
             var idx = value.IndexOf(" (", StringComparison.Ordinal);
             return idx > 0 ? value[..idx] : value;
+        }
+
+        private void UpdateStudentLinkText()
+        {
+            StudentLinkText.Text = _studentId is > 0
+                ? "✓ Обращение будет сохранено в карточке студента."
+                : string.IsNullOrWhiteSpace(SenderBox.Text)
+                    ? "Выберите студента из подсказок, чтобы обращение попало в его карточку."
+                    : "Не привязано к карточке студента. Чтобы привязать, выберите студента из подсказок.";
         }
 
         // ── Автодополнение отправителя ───────────────────────────────
@@ -95,6 +173,10 @@ namespace MedSystem.App.Pages
         {
             if (args.Reason != AutoSuggestionBoxTextChangeReason.UserInput)
                 return;
+
+            // ФИО изменили вручную — прежняя привязка к студенту больше не достоверна.
+            _studentId = null;
+            UpdateStudentLinkText();
 
             _personSearchCancellation?.Cancel();
             var query = sender.Text.Trim();
@@ -144,6 +226,8 @@ namespace MedSystem.App.Pages
             {
                 BirthDateBox.Text = person.BirthDate;
                 GroupNameBox.Text = person.GroupName;
+                _studentId = person.StudentId > 0 ? person.StudentId : null;
+                UpdateStudentLinkText();
             }
         }
 
@@ -208,12 +292,12 @@ namespace MedSystem.App.Pages
                 return;
             }
 
-            var appeal = CollectForm();
-
-            var errors = Validators.ValidateAppeal(appeal);
+            var errors = new List<string>();
+            var appeal = CollectForm(errors);
+            errors.AddRange(Validators.ValidateAppeal(appeal));
             if (errors.Count > 0)
             {
-                await Dialogs.ErrorsAsync(this, errors);
+                await Dialogs.ErrorsAsync(this, errors.Distinct());
                 return;
             }
 

@@ -41,6 +41,13 @@ public static class BackupService
     public static string CreateManualBackup(string destinationPath) =>
         CreateBackup(destinationPath);
 
+    /// <summary>
+    /// Копия перед обновлением схемы. Проверяется только целостность SQLite:
+    /// у очень старых баз может не быть части служебных таблиц.
+    /// </summary>
+    public static string CreateUpgradeBackup(string destinationPath) =>
+        CreateBackup(destinationPath, requireCompleteSchema: false);
+
     public static string? GetLatestBackupPath()
     {
         if (!Directory.Exists(BackupDirectory))
@@ -72,7 +79,9 @@ public static class BackupService
         return safetyBackup;
     }
 
-    public static void ValidateBackup(string path)
+    public static void ValidateBackup(string path) => ValidateBackup(path, requireCompleteSchema: true);
+
+    private static void ValidateBackup(string path, bool requireCompleteSchema)
     {
         if (!File.Exists(path))
             throw new FileNotFoundException("Файл резервной копии не найден.", path);
@@ -85,6 +94,9 @@ public static class BackupService
             if (!string.Equals(check.ExecuteScalar()?.ToString(), "ok", StringComparison.OrdinalIgnoreCase))
                 throw new InvalidDataException("SQLite сообщает о повреждении выбранной базы данных.");
         }
+
+        if (!requireCompleteSchema)
+            return;
 
         string[] requiredTables =
         [
@@ -106,7 +118,7 @@ public static class BackupService
             throw new InvalidDataException("Выбранный файл не является полной базой MedSystem.");
     }
 
-    private static string CreateBackup(string destinationPath)
+    private static string CreateBackup(string destinationPath, bool requireCompleteSchema = true)
     {
         var fullDestination = Path.GetFullPath(destinationPath);
         if (string.Equals(Path.GetFullPath(Db.DbPath), fullDestination, StringComparison.OrdinalIgnoreCase))
@@ -130,7 +142,7 @@ public static class BackupService
                 source.BackupDatabase(destination);
             }
 
-            ValidateBackup(temporaryPath);
+            ValidateBackup(temporaryPath, requireCompleteSchema);
             File.Move(temporaryPath, fullDestination, overwrite: true);
             return fullDestination;
         }

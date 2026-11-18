@@ -48,23 +48,33 @@
 
                 <TextBox x:Name="AddressBox" Header="Адрес проживания" MaxLength="255" />
 
-                <TextBlock Text="Медицинские сроки" Style="{StaticResource SubtitleTextBlockStyle}" Margin="0,8,0,0" />
+                <TextBlock Text="Медицинские данные" Style="{StaticResource SubtitleTextBlockStyle}" Margin="0,8,0,0" />
                 <Grid ColumnSpacing="12">
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="*" />
                         <ColumnDefinition Width="*" />
-                        <ColumnDefinition Width="*" />
                     </Grid.ColumnDefinitions>
 
-                    <TextBox x:Name="SanminimumBox" Grid.Column="0"
-                             Header="Дата санминимума" PlaceholderText="дд.мм.гггг" MaxLength="10" />
-                    <TextBox x:Name="MedicalExamBox" Grid.Column="1"
+                    <TextBox x:Name="MedicalExamBox" Grid.Column="0"
                              Header="Дата медосмотра" PlaceholderText="дд.мм.гггг" MaxLength="10" />
-                    <TextBox x:Name="FluorographyBox" Grid.Column="2"
+                    <TextBox x:Name="FluorographyBox" Grid.Column="1"
                              Header="Дата флюорографии" PlaceholderText="дд.мм.гггг" MaxLength="10" />
                 </Grid>
 
                 <TextBox x:Name="HealthGroupBox" Header="Группа здоровья" MaxLength="100" />
+
+                <Grid ColumnSpacing="12">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="*" />
+                    </Grid.ColumnDefinitions>
+                    <ToggleSwitch x:Name="DispensaryToggle" Grid.Column="0" MinWidth="200"
+                                  Header="Диспансерный учёт" OnContent="Да" OffContent="Нет"
+                                  Toggled="DispensaryToggle_Toggled" />
+                    <TextBox x:Name="DispensaryDetailsBox" Grid.Column="1"
+                             Header="У кого состоит" PlaceholderText="Например: у кардиолога"
+                             MaxLength="255" Visibility="Collapsed" />
+                </Grid>
             </StackPanel>
         </ScrollViewer>
 

@@ -23,6 +23,7 @@
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="*" />
                         <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="*" />
                     </Grid.ColumnDefinitions>
                     <Grid.RowDefinitions>
                         <RowDefinition Height="Auto" />
@@ -35,31 +36,76 @@
                                SpinButtonPlacementMode="Compact" />
                     <TextBox x:Name="CreatedAtBox" Grid.Row="0" Grid.Column="1"
                              Header="Дата обращения" PlaceholderText="дд.мм.гггг" MaxLength="10" />
+                    <TextBox x:Name="CreatedTimeBox" Grid.Row="0" Grid.Column="2"
+                             Header="Время" PlaceholderText="чч:мм" MaxLength="5" />
 
-                    <Grid Grid.Row="1" Grid.Column="0" Grid.ColumnSpan="2">
-                        <AutoSuggestBox x:Name="SenderBox"
-                                        Header="Отправитель"
-                                        PlaceholderText="Начните вводить ФИО..."
-                                        TextMemberPath="Display"
-                                        TextChanged="SenderBox_TextChanged"
-                                        SuggestionChosen="SenderBox_SuggestionChosen" />
-                        <ProgressRing x:Name="SenderSearchRing" Width="18" Height="18"
-                                      Margin="0,22,12,0" HorizontalAlignment="Right"
-                                      VerticalAlignment="Center" IsHitTestVisible="False"
-                                      IsActive="False" Visibility="Collapsed" />
-                    </Grid>
+                    <StackPanel Grid.Row="1" Grid.Column="0" Grid.ColumnSpan="3" Spacing="4">
+                        <Grid>
+                            <AutoSuggestBox x:Name="SenderBox"
+                                            Header="Отправитель"
+                                            PlaceholderText="Начните вводить ФИО..."
+                                            TextMemberPath="Display"
+                                            TextChanged="SenderBox_TextChanged"
+                                            SuggestionChosen="SenderBox_SuggestionChosen" />
+                            <ProgressRing x:Name="SenderSearchRing" Width="18" Height="18"
+                                          Margin="0,22,12,0" HorizontalAlignment="Right"
+                                          VerticalAlignment="Center" IsHitTestVisible="False"
+                                          IsActive="False" Visibility="Collapsed" />
+                        </Grid>
+                        <TextBlock x:Name="StudentLinkText" FontSize="12" Opacity="0.7"
+                                   TextWrapping="Wrap" />
+                    </StackPanel>
 
                     <TextBox x:Name="BirthDateBox" Grid.Row="2" Grid.Column="0"
                              Header="Дата рождения" PlaceholderText="дд.мм.гггг" MaxLength="10" />
                     <TextBox x:Name="ParentPhoneBox" Grid.Row="2" Grid.Column="1"
                              Header="Телефон родителя" PlaceholderText="+7..." MaxLength="20" />
+                    <TextBox x:Name="GroupNameBox" Grid.Row="2" Grid.Column="2"
+                             Header="Группа / принадлежность" MaxLength="64" />
                 </Grid>
-
-                <TextBox x:Name="GroupNameBox" Header="Группа / принадлежность" MaxLength="64" />
 
                 <TextBox x:Name="ComplaintsBox" Header="Жалобы"
                          AcceptsReturn="True" TextWrapping="Wrap" Height="90"
                          MaxLength="2000" />
+
+                <TextBlock Text="Объективные данные" Style="{StaticResource SubtitleTextBlockStyle}"
+                           Margin="0,8,0,0" />
+                <Grid ColumnSpacing="12" RowSpacing="12">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="*" />
+                    </Grid.ColumnDefinitions>
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="Auto" />
+                    </Grid.RowDefinitions>
+
+                    <TextBox x:Name="HeightBox" Grid.Row="0" Grid.Column="0"
+                             Header="Рост, см" PlaceholderText="170" MaxLength="3" />
+                    <TextBox x:Name="WeightBox" Grid.Row="0" Grid.Column="1"
+                             Header="Вес, кг" PlaceholderText="60,5" MaxLength="5" />
+                    <TextBox x:Name="TemperatureBox" Grid.Row="0" Grid.Column="2"
+                             Header="Температура, °C" PlaceholderText="36,6" MaxLength="4" />
+
+                    <Grid Grid.Row="1" Grid.Column="0" ColumnSpacing="6">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                            <ColumnDefinition Width="*" />
+                        </Grid.ColumnDefinitions>
+                        <TextBox x:Name="BloodPressureSystolicBox" Grid.Column="0"
+                                 Header="Давление, мм рт. ст." PlaceholderText="120" MaxLength="3" />
+                        <TextBlock Grid.Column="1" Text="/" FontSize="18"
+                                   VerticalAlignment="Bottom" Margin="0,0,0,6" />
+                        <TextBox x:Name="BloodPressureDiastolicBox" Grid.Column="2"
+                                 Header=" " PlaceholderText="80" MaxLength="3" />
+                    </Grid>
+                    <TextBox x:Name="PulseBox" Grid.Row="1" Grid.Column="1"
+                             Header="Пульс, уд/мин" PlaceholderText="72" MaxLength="3" />
+                    <TextBox x:Name="SaturationBox" Grid.Row="1" Grid.Column="2"
+                             Header="Сатурация, %" PlaceholderText="98" MaxLength="3" />
+                </Grid>
 
                 <Grid>
                     <AutoSuggestBox x:Name="DiagnosisBox"
@@ -75,6 +121,8 @@
                 <TextBox x:Name="ActionsBox" Header="Действия и рекомендации"
                          AcceptsReturn="True" TextWrapping="Wrap" Height="90"
                          MaxLength="2000" />
+
+                <CheckBox x:Name="AmbulanceCheckBox" Content="Вызов скорой помощи" />
             </StackPanel>
         </ScrollViewer>
 

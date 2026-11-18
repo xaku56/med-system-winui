@@ -1,0 +1,188 @@
+<Page
+    x:Class="MedSystem.App.Pages.StudentCardPage"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:local="using:MedSystem.App.Pages"
+    xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+    xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+    mc:Ignorable="d">
+
+    <Page.Resources>
+        <Style x:Key="CardLabelStyle" TargetType="TextBlock">
+            <Setter Property="FontSize" Value="12" />
+            <Setter Property="Opacity" Value="0.6" />
+        </Style>
+        <Style x:Key="CardValueStyle" TargetType="TextBlock">
+            <Setter Property="TextWrapping" Value="Wrap" />
+            <Setter Property="IsTextSelectionEnabled" Value="True" />
+        </Style>
+    </Page.Resources>
+
+    <Grid Padding="32,24,32,24">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+        </Grid.RowDefinitions>
+
+        <!-- Заголовок -->
+        <Grid Grid.Row="0" ColumnSpacing="12">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="Auto" />
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="Auto" />
+            </Grid.ColumnDefinitions>
+            <Button Grid.Column="0" VerticalAlignment="Center" Click="BackButton_Click"
+                    ToolTipService.ToolTip="Назад" Padding="8,6">
+                <FontIcon Glyph="&#xE72B;" FontSize="14" />
+            </Button>
+            <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                <TextBlock x:Name="TitleText" Text="Карточка студента"
+                           Style="{StaticResource TitleTextBlockStyle}" TextWrapping="Wrap" />
+                <TextBlock x:Name="SubtitleText" Opacity="0.7" TextWrapping="Wrap" />
+            </StackPanel>
+            <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="12" VerticalAlignment="Center">
+                <Button x:Name="EditButton" Content="Редактировать" Click="EditButton_Click" IsEnabled="False" />
+                <Button x:Name="NewAppealButton" Content="+ Новое обращение"
+                        Style="{StaticResource AccentButtonStyle}"
+                        Click="NewAppealButton_Click" IsEnabled="False" />
+            </StackPanel>
+        </Grid>
+
+        <!-- Сведения о студенте -->
+        <Border Grid.Row="1" Margin="0,16,0,0" Padding="20,16" CornerRadius="8" BorderThickness="1"
+                Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
+                BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}">
+            <Grid ColumnSpacing="24" RowSpacing="14">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="*" />
+                </Grid.ColumnDefinitions>
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
+                </Grid.RowDefinitions>
+
+                <StackPanel Grid.Row="0" Grid.Column="0" Spacing="2">
+                    <TextBlock Text="Дата рождения" Style="{StaticResource CardLabelStyle}" />
+                    <TextBlock x:Name="BirthDateText" Style="{StaticResource CardValueStyle}" />
+                </StackPanel>
+                <StackPanel Grid.Row="0" Grid.Column="1" Spacing="2">
+                    <TextBlock Text="Полис ОМС" Style="{StaticResource CardLabelStyle}" />
+                    <TextBlock x:Name="OmsText" Style="{StaticResource CardValueStyle}" />
+                </StackPanel>
+                <StackPanel Grid.Row="0" Grid.Column="2" Spacing="2">
+                    <TextBlock Text="Группа здоровья" Style="{StaticResource CardLabelStyle}" />
+                    <TextBlock x:Name="HealthGroupText" Style="{StaticResource CardValueStyle}" />
+                </StackPanel>
+                <StackPanel Grid.Row="0" Grid.Column="3" Spacing="2">
+                    <TextBlock Text="Диспансерный учёт" Style="{StaticResource CardLabelStyle}" />
+                    <TextBlock x:Name="DispensaryText" Style="{StaticResource CardValueStyle}" />
+                </StackPanel>
+
+                <StackPanel Grid.Row="1" Grid.Column="0" Spacing="4">
+                    <TextBlock Text="Медосмотр" Style="{StaticResource CardLabelStyle}" />
+                    <Border x:Name="MedicalExamBadge" CornerRadius="4" Padding="10,2"
+                            HorizontalAlignment="Left">
+                        <TextBlock x:Name="MedicalExamText" FontSize="12" />
+                    </Border>
+                </StackPanel>
+                <StackPanel Grid.Row="1" Grid.Column="1" Spacing="4">
+                    <TextBlock Text="Флюорография" Style="{StaticResource CardLabelStyle}" />
+                    <Border x:Name="FluorographyBadge" CornerRadius="4" Padding="10,2"
+                            HorizontalAlignment="Left">
+                        <TextBlock x:Name="FluorographyText" FontSize="12" />
+                    </Border>
+                </StackPanel>
+                <StackPanel Grid.Row="1" Grid.Column="2" Grid.ColumnSpan="2" Spacing="2">
+                    <TextBlock Text="Адрес проживания" Style="{StaticResource CardLabelStyle}" />
+                    <TextBlock x:Name="AddressText" Style="{StaticResource CardValueStyle}" />
+                </StackPanel>
+            </Grid>
+        </Border>
+
+        <InfoBar x:Name="ErrorBar" Grid.Row="2" Margin="0,12,0,0"
+                 IsOpen="False" Severity="Error" Title="Ошибка загрузки" />
+
+        <Grid Grid.Row="3" Margin="0,20,0,10">
+            <TextBlock Text="История обращений" Style="{StaticResource SubtitleTextBlockStyle}" />
+            <TextBlock x:Name="AppealCountText" HorizontalAlignment="Right"
+                       VerticalAlignment="Center" Opacity="0.6" />
+        </Grid>
+
+        <!-- История обращений -->
+        <Border Grid.Row="4" CornerRadius="8" BorderThickness="1"
+                Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
+                BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}">
+            <Grid>
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="*" />
+                </Grid.RowDefinitions>
+                <Grid Grid.Row="0" Padding="16,12,16,10">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="0.4*" />
+                        <ColumnDefinition Width="1.1*" />
+                        <ColumnDefinition Width="2*" />
+                        <ColumnDefinition Width="1.6*" />
+                        <ColumnDefinition Width="2*" />
+                        <ColumnDefinition Width="0.6*" />
+                    </Grid.ColumnDefinitions>
+                    <TextBlock Grid.Column="0" Text="№" FontSize="12" Opacity="0.6" />
+                    <TextBlock Grid.Column="1" Text="Дата и время" FontSize="12" Opacity="0.6" />
+                    <TextBlock Grid.Column="2" Text="Жалобы" FontSize="12" Opacity="0.6" />
+                    <TextBlock Grid.Column="3" Text="Диагноз" FontSize="12" Opacity="0.6" />
+                    <TextBlock Grid.Column="4" Text="Показатели" FontSize="12" Opacity="0.6" />
+                    <TextBlock Grid.Column="5" Text="Скорая" FontSize="12" Opacity="0.6" />
+                </Grid>
+                <Rectangle Grid.Row="1" Height="1" HorizontalAlignment="Stretch"
+                           Fill="{ThemeResource DividerStrokeColorDefaultBrush}" />
+                <ListView x:Name="AppealsList" Grid.Row="2" Margin="4,2,4,6" SelectionMode="Single"
+                          IsDoubleTapEnabled="True" DoubleTapped="AppealsList_DoubleTapped">
+                    <ListView.ItemTemplate>
+                        <DataTemplate x:DataType="local:StudentAppealRow">
+                            <Grid Padding="4,10" Background="Transparent">
+                                <Grid.ContextFlyout>
+                                    <MenuFlyout>
+                                        <MenuFlyoutItem Text="Открыть / Редактировать"
+                                                        Tag="{x:Bind Id}" Click="OpenAppealMenuItem_Click" />
+                                    </MenuFlyout>
+                                </Grid.ContextFlyout>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="0.4*" />
+                                    <ColumnDefinition Width="1.1*" />
+                                    <ColumnDefinition Width="2*" />
+                                    <ColumnDefinition Width="1.6*" />
+                                    <ColumnDefinition Width="2*" />
+                                    <ColumnDefinition Width="0.6*" />
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Grid.Column="0" Text="{x:Bind Number}" />
+                                <TextBlock Grid.Column="1" Text="{x:Bind DateTime}" Opacity="0.8" />
+                                <TextBlock Grid.Column="2" Text="{x:Bind Complaints}" Opacity="0.8"
+                                           TextWrapping="Wrap" MaxLines="3" TextTrimming="CharacterEllipsis"
+                                           Margin="0,0,12,0" />
+                                <TextBlock Grid.Column="3" Text="{x:Bind Diagnosis}" Opacity="0.8"
+                                           TextWrapping="Wrap" MaxLines="3" TextTrimming="CharacterEllipsis"
+                                           Margin="0,0,12,0" />
+                                <TextBlock Grid.Column="4" Text="{x:Bind Vitals}" Opacity="0.8"
+                                           TextWrapping="Wrap" Margin="0,0,12,0" />
+                                <TextBlock Grid.Column="5" Text="{x:Bind Ambulance}" Opacity="0.8" />
+                            </Grid>
+                        </DataTemplate>
+                    </ListView.ItemTemplate>
+                </ListView>
+                <TextBlock x:Name="EmptyText" Grid.Row="2" Text="Обращений пока нет"
+                           HorizontalAlignment="Center" VerticalAlignment="Center"
+                           Opacity="0.6" Visibility="Collapsed" />
+                <ProgressRing x:Name="LoadingRing" Grid.Row="2" Width="40" Height="40"
+                              IsActive="False" Visibility="Collapsed"
+                              HorizontalAlignment="Center" VerticalAlignment="Center" />
+            </Grid>
+        </Border>
+    </Grid>
+</Page>

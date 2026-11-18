@@ -7,6 +7,12 @@ using MedSystem.Core.Validation;
 using MedSystem.Data;
 using MedSystem.Data.Repositories;
 
+if (args.Length == 2 && args[0] == "--verify-upgrade")
+{
+    Environment.ExitCode = UpgradeVerification.Run(args[1]);
+    return;
+}
+
 var checks = 0;
 void Check(bool condition, string scenario)
 {
@@ -39,6 +45,45 @@ Check(Validators.ValidateStudent(new Student { LastName = "Иванов", FirstN
     "optional student fields remain optional");
 Check(Validators.ValidateMedicine(new Medicine { Name = "A", Dosage = "B", Quantity = -1, ExpirationDate = Date(today) }).Count == 1,
     "negative quantity rejected");
+
+Appeal ValidAppeal() => new() { Number = 1, CreatedAt = Date(today), Sender = "Иванов Пётр", Complaints = "Боль" };
+Check(Validators.ValidateAppeal(ValidAppeal()).Count == 0, "vital signs are optional");
+var vitalAppeal = ValidAppeal();
+vitalAppeal.HeightCm = 170;
+vitalAppeal.WeightKg = 60.5;
+vitalAppeal.Temperature = 36.6;
+vitalAppeal.BloodPressureSystolic = 120;
+vitalAppeal.BloodPressureDiastolic = 80;
+vitalAppeal.Pulse = 72;
+vitalAppeal.Saturation = 98;
+vitalAppeal.CreatedTime = "09:05";
+Check(Validators.ValidateAppeal(vitalAppeal).Count == 0, "normal vital signs accepted");
+vitalAppeal.Temperature = 50;
+vitalAppeal.Saturation = 101;
+Check(Validators.ValidateAppeal(vitalAppeal).Count == 2, "out-of-range vital signs rejected");
+var pressureAppeal = ValidAppeal();
+pressureAppeal.BloodPressureSystolic = 120;
+Check(Validators.ValidateAppeal(pressureAppeal).Count == 1, "blood pressure needs both values");
+pressureAppeal.BloodPressureDiastolic = 130;
+Check(Validators.ValidateAppeal(pressureAppeal).Count == 1, "systolic must exceed diastolic");
+var timeAppeal = ValidAppeal();
+timeAppeal.CreatedTime = "24:00";
+Check(Validators.ValidateAppeal(timeAppeal).Count == 1 && Validators.IsValidTime("23:59"), "appeal time format");
+Check(Validators.TryParseOptionalNumber("36,6", out var comma) && comma == 36.6
+    && Validators.TryParseOptionalNumber(" 36.6 ", out var dot) && dot == 36.6
+    && Validators.TryParseOptionalNumber("", out var empty) && empty is null
+    && !Validators.TryParseOptionalNumber("36,6,1", out _)
+    && !Validators.TryParseOptionalNumber("-1", out _), "decimal input accepts comma and dot");
+Check(Validators.TryParseOptionalInteger("72", out var pulse) && pulse == 72
+    && !Validators.TryParseOptionalInteger("72,5", out _), "integer input");
+vitalAppeal.Temperature = 37.2;
+vitalAppeal.Saturation = 98;
+Check(vitalAppeal.VitalsSummary == "Рост 170 см · Вес 60,5 кг · Т 37,2 °C · АД 120/80 · Пульс 72 · SpO₂ 98%",
+    "vitals summary order and Russian formatting");
+Check(vitalAppeal.DateTimeDisplay == $"{Date(today)} 09:05" && ValidAppeal().DateTimeDisplay == Date(today),
+    "date and time display");
+Check(new Student { IsOnDispensaryRegister = true, DispensaryDetails = "у кардиолога" }.DispensaryDisplay == "Да — у кардиолога"
+    && new Student().DispensaryDisplay == "Нет", "dispensary register display");
 
 var loader = new LatestLoad();
 var oldRead = new TaskCompletionSource();
@@ -122,10 +167,10 @@ try
     Check(StudentRepository.GetById(student.Id) is null, "trash excluded from lookup");
     Check(StudentRepository.FindDuplicates(new Student { Oms = student.Oms }).Single().Contains("в корзине"), "duplicates include trash");
     TrashRepository.Restore("student", student.Id);
-    student.SanminimumDate = Date(today.AddYears(-2));
+    student.FluorographyDate = Date(today.AddYears(-2));
     student.MedicalExamDate = Date(today.AddDays(1).AddYears(-1));
     StudentRepository.Update(student);
-    Check(ExpirationRules.GetPersonStatus([student.SanminimumDate, student.MedicalExamDate]) == (true, true), "expired and expiring checkups coexist");
+    Check(ExpirationRules.GetPersonStatus([student.FluorographyDate, student.MedicalExamDate]) == (true, true), "expired and expiring checkups coexist");
     Check(StudentRepository.GetPage(new() { StatusFilter = 1 }).TotalCount == 1
         && StudentRepository.GetPage(new() { StatusFilter = 2 }).TotalCount == 1, "person SQL status agrees with core rules");
 
@@ -171,12 +216,75 @@ try
     Check(IcdRepository.GetPage("орви", 99, 100).Items.Single().Code == "J06.9", "ICD search and page clamp");
     Check(IcdRepository.GetPage("missing", 99, 100).Page == 1, "empty ICD search");
 
+    student.IsOnDispensaryRegister = true;
+    student.DispensaryDetails = "у кардиолога";
+    StudentRepository.Update(student);
+    var registered = StudentRepository.GetById(student.Id);
+    Check(registered is { IsOnDispensaryRegister: true, DispensaryDetails: "у кардиолога" }, "dispensary register saved");
+    student.IsOnDispensaryRegister = false;
+    StudentRepository.Update(student);
+    Check(StudentRepository.GetById(student.Id) is { IsOnDispensaryRegister: false, DispensaryDetails: "" },
+        "dispensary details cleared when register is off");
+
+    var personOptions = AppealRepository.SearchPersons("ПЁТР");
+    Check(personOptions.All(p => p.StudentId > 0) && personOptions.Any(p => p.StudentId == student.Id),
+        "sender suggestions carry student ids");
+    Check(AppealRepository.SearchPersons("Сидоров").Single().StudentId == 0, "employee suggestions are not linked");
+
+    vitalAppeal.Number = 20;
+    vitalAppeal.StudentId = student.Id;
+    vitalAppeal.AmbulanceCalled = true;
+    AppealRepository.Insert(vitalAppeal);
+    AppealRepository.Insert(new Appeal
+    {
+        Number = 21,
+        CreatedAt = Date(today.AddDays(-3)),
+        CreatedTime = "23:00",
+        StudentId = student.Id,
+        Sender = student.FullName,
+        Complaints = "Насморк",
+    });
+    AppealRepository.Insert(new Appeal { Number = 22, CreatedAt = Date(today), Sender = "Без привязки", Complaints = "Боль" });
+    var history = AppealRepository.GetByStudent(student.Id);
+    Check(history.Select(a => a.Number).SequenceEqual([20L, 21L]), "student history contains only linked appeals, newest date first");
+    var savedAppeal = history[0];
+    Check(savedAppeal is
+    {
+        CreatedTime: "09:05", HeightCm: 170, WeightKg: 60.5, Temperature: 37.2,
+        BloodPressureSystolic: 120, BloodPressureDiastolic: 80, Pulse: 72, Saturation: 98, AmbulanceCalled: true,
+    } && savedAppeal.StudentId == student.Id, "appeal vital signs round trip");
+    savedAppeal.Temperature = null;
+    savedAppeal.AmbulanceCalled = false;
+    savedAppeal.StudentId = null;
+    AppealRepository.Update(savedAppeal);
+    Check(AppealRepository.GetById(savedAppeal.Id) is { Temperature: null, AmbulanceCalled: false, StudentId: null }
+        && AppealRepository.GetByStudent(student.Id).Count == 1, "appeal update clears values and unlinks student");
+    AppealRepository.MoveToTrash(history[1].Id);
+    Check(AppealRepository.GetByStudent(student.Id).Count == 0, "trashed appeals hidden from student history");
+    TrashRepository.Restore("appeal", history[1].Id);
+
     students = StudentRepository.GetPage(new() { Page = 2, PageSize = 2 });
     StudentRepository.MoveToTrash(students.Items.Single().Id);
     Check(StudentRepository.GetPage(new() { Page = 2, PageSize = 2 }).Page == 1, "deleting last row clamps page");
     Check(TrashRepository.GetPage(1, 100).TotalCount == 2, "trash contains deleted entities");
     TrashRepository.SetRetentionDays(0);
     Check(TrashRepository.PurgeExpired() == 0, "automatic trash cleanup can be disabled");
+
+    StudentRepository.Insert(new Student { LastName = "Удаляемый", FirstName = "Студент" });
+    var removable = StudentRepository.GetPage(new() { SearchText = "Удаляемый" }).Items.Single();
+    AppealRepository.Insert(new Appeal
+    {
+        Number = 30,
+        CreatedAt = Date(today),
+        StudentId = removable.Id,
+        Sender = removable.FullName,
+        Complaints = "Кашель",
+    });
+    StudentRepository.MoveToTrash(removable.Id);
+    TrashRepository.DeletePermanently("student", removable.Id);
+    var orphan = AppealRepository.GetPage(new() { SearchText = "Удаляемый" }).Items.Single();
+    Check(orphan.StudentId is null && orphan.Sender == removable.FullName,
+        "permanently deleted student keeps appeals with sender text");
 
     var testDbPath = Db.DbPath;
     Db.DbPath = Path.Combine(directory, "missing", "checks.db");
@@ -248,6 +356,116 @@ try
     }, ReportActionError);
     Check(actionError is InvalidOperationException && GroupRepository.GetStudentCount(groupId) > 0,
         "nonempty group error is reported and related students remain available");
+
+    // ── Обновление базы старой версии (схема 0, как у python-версии) ─────
+    var currentDbPath = Db.DbPath;
+    var legacyDirectory = Path.Combine(directory, "legacy");
+    Directory.CreateDirectory(legacyDirectory);
+    Db.DbPath = Path.Combine(legacyDirectory, "med_system.db");
+    using (var legacy = new SqliteConnection($"Data Source={Db.DbPath};Pooling=False"))
+    {
+        legacy.Open();
+        using var command = legacy.CreateCommand();
+        command.CommandText = """
+            CREATE TABLE groups (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL UNIQUE);
+            CREATE TABLE employees (
+                id INTEGER PRIMARY KEY AUTOINCREMENT, last_name TEXT NOT NULL, first_name TEXT NOT NULL,
+                middle_name TEXT NOT NULL, birth_date TEXT NOT NULL,
+                affiliation TEXT CHECK(affiliation IN ('основной', 'внешний')),
+                passport_series TEXT NOT NULL, passport_number TEXT NOT NULL, passport_issued_by TEXT NOT NULL,
+                passport_issue_date TEXT NOT NULL, passport_department_code TEXT NOT NULL, oms TEXT NOT NULL,
+                address TEXT NOT NULL, sanminimum_date TEXT NOT NULL, medical_exam_date TEXT NOT NULL,
+                fluorography_date TEXT NOT NULL);
+            CREATE TABLE students (
+                id INTEGER PRIMARY KEY AUTOINCREMENT, group_id INTEGER, last_name TEXT NOT NULL,
+                first_name TEXT NOT NULL, middle_name TEXT NOT NULL, birth_date TEXT NOT NULL, oms TEXT NOT NULL,
+                address TEXT NOT NULL, sanminimum_date TEXT NOT NULL, medical_exam_date TEXT NOT NULL,
+                fluorography_date TEXT NOT NULL, health_group TEXT NOT NULL DEFAULT '',
+                FOREIGN KEY (group_id) REFERENCES groups(id) ON DELETE RESTRICT);
+            CREATE TABLE medicines (
+                id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL, dosage TEXT NOT NULL,
+                quantity INTEGER NOT NULL, expiration_date TEXT NOT NULL);
+            CREATE TABLE appeals (
+                id INTEGER PRIMARY KEY AUTOINCREMENT, number INTEGER NOT NULL, created_at TEXT NOT NULL,
+                sender TEXT NOT NULL, birth_date TEXT NOT NULL, parent_phone TEXT NOT NULL,
+                group_name TEXT NOT NULL, complaints TEXT NOT NULL, diagnosis TEXT NOT NULL,
+                actions_recommendations TEXT NOT NULL);
+            CREATE TABLE system_info (key TEXT PRIMARY KEY, value TEXT);
+            CREATE TABLE icd_codes (code TEXT PRIMARY KEY, name TEXT NOT NULL);
+            CREATE INDEX idx_students_group_id ON students(group_id);
+            CREATE INDEX idx_appeals_number ON appeals(number);
+            INSERT INTO groups (name) VALUES ('21-ИС-Б');
+            INSERT INTO students (group_id, last_name, first_name, middle_name, birth_date, oms, address,
+                                  sanminimum_date, medical_exam_date, fluorography_date, health_group)
+            VALUES (1, 'Петрова', 'Анна', 'Сергеевна', '01.02.2007', '1111222233334444', 'ул. Ленина',
+                    '01.09.2025', '02.09.2025', '03.09.2025', 'Основная'),
+                   (1, 'Смирнов', 'Олег', '', '05.05.2006', '', '', '', '', '', ''),
+                   (NULL, 'Смирнов', 'Олег', '', '05.05.2006', '', '', '', '', '', '');
+            INSERT INTO employees (last_name, first_name, middle_name, birth_date, affiliation, passport_series,
+                                   passport_number, passport_issued_by, passport_issue_date,
+                                   passport_department_code, oms, address, sanminimum_date,
+                                   medical_exam_date, fluorography_date)
+            VALUES ('Кузнецова', 'Мария', '', '', 'основной', '', '', '', '', '', '', '', '', '', '');
+            INSERT INTO students (group_id, last_name, first_name, middle_name, birth_date, oms, address,
+                                  sanminimum_date, medical_exam_date, fluorography_date)
+            VALUES (1, 'Кузнецова', 'Мария', '', '', '', '', '', '', '');
+            INSERT INTO appeals (number, created_at, sender, birth_date, parent_phone, group_name,
+                                 complaints, diagnosis, actions_recommendations)
+            VALUES (1, '01.10.2025', 'петрова анна сергеевна', '01.02.2007', '', '21-ИС-Б', 'Боль', '', ''),
+                   (2, '02.10.2025', 'Смирнов Олег', '05.05.2006', '', '', 'Кашель', '', ''),
+                   (3, '03.10.2025', 'Кузнецова Мария', '', '', '', 'Головокружение', '', ''),
+                   (4, '04.10.2025', 'Петрова Анна Сергеевна', '09.09.2009', '', '', 'Насморк', '', '');
+            INSERT INTO system_info (key, value) VALUES ('last_group_increment_year', '2025');
+            """;
+        command.ExecuteNonQuery();
+    }
+    DatabaseInitializer.Initialize();
+    DatabaseInitializer.Initialize();
+    SqliteConnection.ClearAllPools();
+    var upgradeBackups = Directory.GetFiles(BackupService.BackupDirectory, "med_system_before_upgrade_v0_to_v2_*.db");
+    Check(upgradeBackups.Length == 1, "one backup is created before upgrading an existing database");
+    using (var backupConnection = new SqliteConnection($"Data Source={upgradeBackups[0]};Mode=ReadOnly;Pooling=False"))
+    using (var command = backupConnection.CreateCommand())
+    {
+        backupConnection.Open();
+        command.CommandText = "SELECT sanminimum_date FROM students WHERE last_name = 'Петрова'";
+        Check((string?)command.ExecuteScalar() == "01.09.2025", "pre-upgrade backup keeps the original schema and data");
+    }
+    using (var upgraded = Db.Open())
+    using (var command = upgraded.CreateCommand())
+    {
+        command.CommandText = "PRAGMA user_version";
+        Check(Convert.ToInt32(command.ExecuteScalar()) == DatabaseInitializer.CurrentSchemaVersion, "legacy schema upgraded to current version");
+        command.CommandText = "SELECT COUNT(*) FROM pragma_table_info('students') WHERE name = 'sanminimum_date'";
+        Check(Convert.ToInt32(command.ExecuteScalar()) == 0, "student sanminimum column removed");
+        command.CommandText = "SELECT COUNT(*) FROM pragma_table_info('employees') WHERE name = 'sanminimum_date'";
+        Check(Convert.ToInt32(command.ExecuteScalar()) == 1, "employee sanminimum column kept");
+        command.CommandText = "SELECT COUNT(*) FROM pragma_foreign_key_check";
+        Check(Convert.ToInt32(command.ExecuteScalar()) == 0, "upgraded database has no foreign key violations");
+        command.CommandText = "PRAGMA integrity_check";
+        Check((string?)command.ExecuteScalar() == "ok", "upgraded database integrity");
+        command.CommandText = "SELECT value FROM system_info WHERE key = 'last_group_increment_year'";
+        Check((string?)command.ExecuteScalar() == "2025", "system settings preserved");
+    }
+    var upgradedStudent = StudentRepository.GetPage(new() { SearchText = "Петрова" }).Items.Single();
+    Check(upgradedStudent is
+    {
+        BirthDate: "01.02.2007", Oms: "1111222233334444", Address: "ул. Ленина", MedicalExamDate: "02.09.2025",
+        FluorographyDate: "03.09.2025", HealthGroup: "Основная", GroupName: "21-ИС-Б", IsOnDispensaryRegister: false,
+    }, "student data preserved by upgrade");
+    Check(StudentRepository.GetPage(new()).TotalCount == 4 && GroupRepository.GetAll().Count == 1
+        && EmployeeRepository.GetPage(new()).TotalCount == 1, "row counts preserved by upgrade");
+    var upgradedAppeals = AppealRepository.GetPage(new()).Items.ToDictionary(a => a.Number);
+    Check(upgradedAppeals.Count == 4 && upgradedAppeals[1].StudentId == upgradedStudent.Id
+        && upgradedAppeals[1].Complaints == "Боль" && upgradedAppeals[1].CreatedTime == ""
+        && upgradedAppeals[1].Temperature is null && !upgradedAppeals[1].AmbulanceCalled,
+        "unique legacy appeal linked to its student, new fields empty");
+    Check(upgradedAppeals[2].StudentId is null, "ambiguous legacy appeal stays unlinked");
+    Check(upgradedAppeals[3].StudentId is null, "legacy appeal matching an employee stays unlinked");
+    Check(upgradedAppeals[4].StudentId is null, "legacy appeal with another birth date stays unlinked");
+    Check(StudentRepository.GetPage(new() { StatusFilter = 1 }).TotalCount == 1, "student status works after upgrade");
+    SqliteConnection.ClearAllPools();
+    Db.DbPath = currentDbPath;
 
     var backup = BackupService.CreateManualBackup(Path.Combine(directory, "backup.db"));
     BackupService.ValidateBackup(backup);

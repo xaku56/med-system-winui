@@ -20,6 +20,10 @@ namespace MedSystem.App.Pages
         public string CreatedAt { get; set; } = "";
         public string Sender { get; set; } = "";
         public string Complaints { get; set; } = "";
+        public string Temperature { get; set; } = "";
+        public string Ambulance { get; set; } = "";
+        public long StudentId { get; set; }
+        public Visibility StudentCardVisibility { get; set; } = Visibility.Collapsed;
     }
 
     public sealed partial class AppealsPage : Page
@@ -91,9 +95,13 @@ namespace MedSystem.App.Pages
         {
             Id = appeal.Id,
             Number = appeal.Number.ToString(),
-            CreatedAt = appeal.CreatedAt,
+            CreatedAt = appeal.DateTimeDisplay,
             Sender = FormatInitials(appeal.Sender),
             Complaints = appeal.Complaints,
+            Temperature = appeal.TemperatureDisplay,
+            Ambulance = appeal.AmbulanceCalled ? "Да" : "",
+            StudentId = appeal.StudentId ?? 0,
+            StudentCardVisibility = appeal.StudentId is > 0 ? Visibility.Visible : Visibility.Collapsed,
         };
 
         /// <summary>"Иванов Пётр Сергеевич" → "Иванов П. С."</summary>
@@ -180,6 +188,12 @@ namespace MedSystem.App.Pages
         {
             if (sender is FrameworkElement { Tag: long id })
                 Frame.Navigate(typeof(AppealFormPage), id);
+        }
+
+        private void StudentCardMenuItem_Click(object sender, RoutedEventArgs e)
+        {
+            if (sender is FrameworkElement { Tag: long studentId } && studentId > 0)
+                Frame.Navigate(typeof(StudentCardPage), studentId);
         }
 
         private async void DeleteMenuItem_Click(object sender, RoutedEventArgs e)

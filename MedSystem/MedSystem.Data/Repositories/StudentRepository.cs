@@ -16,6 +16,14 @@ public sealed class StudentPageRequest
 
 public static class StudentRepository
 {
+    private const string SelectColumns = """
+        s.id, s.group_id, g.name, s.last_name, s.first_name, s.middle_name,
+        s.birth_date, s.oms, s.address,
+        s.medical_exam_date, s.fluorography_date,
+        s.health_group, s.archive_reason,
+        s.dispensary_registered, s.dispensary_details, s.archived_at
+        """;
+
     public static PageResult<Student> GetPage(StudentPageRequest request)
     {
         var pageSize = Math.Clamp(request.PageSize, 1, Pagination.MaximumPageSize);
@@ -57,7 +65,7 @@ public static class StudentRepository
         if (request.StatusFilter is 1 or 2)
         {
             var statusFlag = request.StatusFilter == 1 ? 1 : 2;
-            where.Add("(person_status(s.sanminimum_date, s.medical_exam_date, s.fluorography_date) & $statusFlag) <> 0");
+            where.Add("(person_status(s.medical_exam_date, s.fluorography_date) & $statusFlag) <> 0");
             cmd.Parameters.AddWithValue("$statusFlag", statusFlag);
         }
 
@@ -69,10 +77,7 @@ public static class StudentRepository
         cmd.Parameters.AddWithValue("$limit", pageSize);
         cmd.Parameters.AddWithValue("$offset", (page - 1) * pageSize);
         cmd.CommandText = $"""
-            SELECT s.id, s.group_id, g.name, s.last_name, s.first_name, s.middle_name,
-                   s.birth_date, s.oms, s.address,
-                   s.sanminimum_date, s.medical_exam_date, s.fluorography_date,
-                   s.health_group, s.archive_reason
+            SELECT {SelectColumns}
             FROM students s
             LEFT JOIN groups g ON s.group_id = g.id
             WHERE {whereSql}
@@ -97,11 +102,8 @@ public static class StudentRepository
     {
         using var conn = Db.Open();
         using var cmd = conn.CreateCommand();
-        cmd.CommandText = """
-            SELECT s.id, s.group_id, g.name, s.last_name, s.first_name, s.middle_name,
-                   s.birth_date, s.oms, s.address,
-                   s.sanminimum_date, s.medical_exam_date, s.fluorography_date,
-                   s.health_group, s.archive_reason
+        cmd.CommandText = $"""
+            SELECT {SelectColumns}
             FROM students s
             LEFT JOIN groups g ON s.group_id = g.id
             WHERE s.id = $id AND s.deleted_at IS NULL
@@ -173,12 +175,12 @@ public static class StudentRepository
         cmd.CommandText = """
             INSERT INTO students (
                 group_id, last_name, first_name, middle_name, birth_date,
-                oms, address, sanminimum_date, medical_exam_date, fluorography_date,
-                health_group
+                oms, address, medical_exam_date, fluorography_date,
+                health_group, dispensary_registered, dispensary_details
             ) VALUES (
                 $groupId, $lastName, $firstName, $middleName, $birthDate,
-                $oms, $address, $sanminimumDate, $medicalExamDate, $fluorographyDate,
-                $healthGroup
+                $oms, $address, $medicalExamDate, $fluorographyDate,
+                $healthGroup, $dispensaryRegistered, $dispensaryDetails
             )
             """;
         AddParameters(cmd, s);
@@ -193,9 +195,11 @@ public static class StudentRepository
             UPDATE students SET
                 group_id = $groupId, last_name = $lastName, first_name = $firstName,
                 middle_name = $middleName, birth_date = $birthDate, oms = $oms,
-                address = $address, sanminimum_date = $sanminimumDate,
+                address = $address,
                 medical_exam_date = $medicalExamDate, fluorography_date = $fluorographyDate,
-                health_group = $healthGroup
+                health_group = $healthGroup,
+                dispensary_registered = $dispensaryRegistered,
+                dispensary_details = $dispensaryDetails
             WHERE id = $id AND deleted_at IS NULL
             """;
         AddParameters(cmd, s);
@@ -256,10 +260,12 @@ public static class StudentRepository
         cmd.Parameters.AddWithValue("$birthDate", s.BirthDate);
         cmd.Parameters.AddWithValue("$oms", s.Oms);
         cmd.Parameters.AddWithValue("$address", s.Address);
-        cmd.Parameters.AddWithValue("$sanminimumDate", s.SanminimumDate);
         cmd.Parameters.AddWithValue("$medicalExamDate", s.MedicalExamDate);
         cmd.Parameters.AddWithValue("$fluorographyDate", s.FluorographyDate);
         cmd.Parameters.AddWithValue("$healthGroup", s.HealthGroup);
+        cmd.Parameters.AddWithValue("$dispensaryRegistered", s.IsOnDispensaryRegister ? 1 : 0);
+        // Текст «у кого состоит» имеет смысл только при отметке «Да».
+        cmd.Parameters.AddWithValue("$dispensaryDetails", s.IsOnDispensaryRegister ? s.DispensaryDetails : "");
     }
 
     private static Student ReadStudent(Microsoft.Data.Sqlite.SqliteDataReader reader) => new()
@@ -273,10 +279,12 @@ public static class StudentRepository
         BirthDate = reader.GetString(6),
         Oms = reader.GetString(7),
         Address = reader.GetString(8),
-        SanminimumDate = reader.GetString(9),
-        MedicalExamDate = reader.GetString(10),
-        FluorographyDate = reader.GetString(11),
-        HealthGroup = reader.GetString(12),
-        ArchiveReason = reader.IsDBNull(13) ? "" : reader.GetString(13),
+        MedicalExamDate = reader.GetString(9),
+        FluorographyDate = reader.GetString(10),
+        HealthGroup = reader.GetString(11),
+        ArchiveReason = reader.IsDBNull(12) ? "" : reader.GetString(12),
+        IsOnDispensaryRegister = reader.GetInt64(13) != 0,
+        DispensaryDetails = reader.GetString(14),
+        IsArchived = !reader.IsDBNull(15),
     };
 }

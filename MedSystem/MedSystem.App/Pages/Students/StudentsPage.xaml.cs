@@ -26,13 +26,11 @@ namespace MedSystem.App.Pages
         public string FullName { get; set; } = "";
         public string GroupName { get; set; } = "";
         public string ArchiveReason { get; set; } = "";
-        public string Sanminimum { get; set; } = "";
         public string MedicalExam { get; set; } = "";
         public string Fluorography { get; set; } = "";
+        public string Dispensary { get; set; } = "";
         public Visibility ArchiveVisibility { get; set; }
         public Visibility RestoreVisibility { get; set; }
-        public Microsoft.UI.Xaml.Media.Brush SanminimumBg { get; set; } = Badges.TransparentBg;
-        public Microsoft.UI.Xaml.Media.Brush SanminimumFg { get; set; } = Badges.NormalFg;
         public Microsoft.UI.Xaml.Media.Brush MedicalExamBg { get; set; } = Badges.TransparentBg;
         public Microsoft.UI.Xaml.Media.Brush MedicalExamFg { get; set; } = Badges.NormalFg;
         public Microsoft.UI.Xaml.Media.Brush FluorographyBg { get; set; } = Badges.TransparentBg;
@@ -139,10 +137,8 @@ namespace MedSystem.App.Pages
 
         private static StudentRow CreateRow(Student s, bool showArchived, bool dark)
         {
-            var sanStatus = ExpirationRules.GetSingleCheckupStatus(s.SanminimumDate);
             var medStatus = ExpirationRules.GetSingleCheckupStatus(s.MedicalExamDate);
             var fluStatus = ExpirationRules.GetSingleCheckupStatus(s.FluorographyDate);
-            var (sanBg, sanFg) = Badges.For(sanStatus.IsExpired, sanStatus.IsExpiring, dark);
             var (medBg, medFg) = Badges.For(medStatus.IsExpired, medStatus.IsExpiring, dark);
             var (fluBg, fluFg) = Badges.For(fluStatus.IsExpired, fluStatus.IsExpiring, dark);
             return new StudentRow
@@ -153,13 +149,11 @@ namespace MedSystem.App.Pages
                 ArchiveReason = string.IsNullOrWhiteSpace(s.ArchiveReason)
                     ? "Причина не указана"
                     : $"Причина: {s.ArchiveReason}",
-                Sanminimum = s.SanminimumDate,
                 MedicalExam = s.MedicalExamDate,
                 Fluorography = s.FluorographyDate,
+                Dispensary = s.DispensaryDisplay,
                 ArchiveVisibility = showArchived ? Visibility.Collapsed : Visibility.Visible,
                 RestoreVisibility = showArchived ? Visibility.Visible : Visibility.Collapsed,
-                SanminimumBg = sanBg,
-                SanminimumFg = sanFg,
                 MedicalExamBg = medBg,
                 MedicalExamFg = medFg,
                 FluorographyBg = fluBg,
@@ -313,10 +307,16 @@ namespace MedSystem.App.Pages
         private void StudentsList_DoubleTapped(object sender, DoubleTappedRoutedEventArgs e)
         {
             if (StudentsList.SelectedItem is StudentRow row)
-                Frame.Navigate(typeof(StudentFormPage), row.Id);
+                Frame.Navigate(typeof(StudentCardPage), row.Id);
         }
 
         private void OpenMenuItem_Click(object sender, RoutedEventArgs e)
+        {
+            if (sender is FrameworkElement { Tag: long id })
+                Frame.Navigate(typeof(StudentCardPage), id);
+        }
+
+        private void EditMenuItem_Click(object sender, RoutedEventArgs e)
         {
             if (sender is FrameworkElement { Tag: long id })
                 Frame.Navigate(typeof(StudentFormPage), id);

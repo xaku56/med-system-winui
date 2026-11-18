@@ -7,7 +7,7 @@ namespace MedSystem.Data;
 /// </summary>
 public static class DatabaseInitializer
 {
-    public const int CurrentSchemaVersion = 1;
+    public const int CurrentSchemaVersion = 2;
 
     private const string EmployeesTableSql = """
         CREATE TABLE IF NOT EXISTS employees (
@@ -43,10 +43,11 @@ public static class DatabaseInitializer
             birth_date TEXT NOT NULL,
             oms TEXT NOT NULL,
             address TEXT NOT NULL,
-            sanminimum_date TEXT NOT NULL,
             medical_exam_date TEXT NOT NULL,
             fluorography_date TEXT NOT NULL,
             health_group TEXT NOT NULL DEFAULT '',
+            dispensary_registered INTEGER NOT NULL DEFAULT 0,
+            dispensary_details TEXT NOT NULL DEFAULT '',
             archived_at TEXT,
             archive_reason TEXT,
             deleted_at TEXT,
@@ -56,6 +57,8 @@ public static class DatabaseInitializer
 
     public static void Initialize()
     {
+        BackupBeforeUpgrade();
+
         using var conn = Db.Open();
         using var tx = conn.BeginTransaction();
 
@@ -99,7 +102,17 @@ public static class DatabaseInitializer
                 complaints TEXT NOT NULL,
                 diagnosis TEXT NOT NULL,
                 actions_recommendations TEXT NOT NULL,
-                deleted_at TEXT
+                deleted_at TEXT,
+                created_time TEXT NOT NULL DEFAULT '',
+                student_id INTEGER REFERENCES students(id) ON DELETE SET NULL,
+                height_cm INTEGER,
+                weight_kg REAL,
+                temperature REAL,
+                bp_systolic INTEGER,
+                bp_diastolic INTEGER,
+                pulse INTEGER,
+                saturation INTEGER,
+                ambulance_called INTEGER NOT NULL DEFAULT 0
             )
             """);
 
@@ -119,10 +132,12 @@ public static class DatabaseInitializer
 
         Execute(conn, "CREATE INDEX IF NOT EXISTS idx_students_group_id ON students(group_id)");
         Execute(conn, "CREATE INDEX IF NOT EXISTS idx_appeals_number ON appeals(number)");
-        Execute(conn, "CREATE INDEX IF NOT EXISTS idx_appeals_active_number ON appeals(deleted_at, number DESC, id DESC)");
-        Execute(conn, "CREATE INDEX IF NOT EXISTS idx_medicines_active_name ON medicines(deleted_at, name, id)");
 
         ApplyVersionedMigrations(conn);
+
+        // Индексы по deleted_at — только после миграций: в базах схемы 0 этой колонки ещё нет.
+        Execute(conn, "CREATE INDEX IF NOT EXISTS idx_appeals_active_number ON appeals(deleted_at, number DESC, id DESC)");
+        Execute(conn, "CREATE INDEX IF NOT EXISTS idx_medicines_active_name ON medicines(deleted_at, name, id)");
         SeedIcdCodes(conn);
 
         tx.Commit();
@@ -157,10 +172,10 @@ public static class DatabaseInitializer
             Execute(conn, """
                 INSERT INTO students (
                     id, group_id, last_name, first_name, middle_name, birth_date,
-                    oms, address, sanminimum_date, medical_exam_date, fluorography_date
+                    oms, address, medical_exam_date, fluorography_date
                 )
                 SELECT id, group_id, last_name, first_name, middle_name, birth_date,
-                       oms, address, sanminimum_date, medical_exam_date, fluorography_date
+                       oms, address, medical_exam_date, fluorography_date
                 FROM students_legacy
                 """);
             Execute(conn, "DROP TABLE students_legacy");
@@ -201,6 +216,81 @@ public static class DatabaseInitializer
             Execute(conn, "INSERT OR IGNORE INTO system_info (key, value) VALUES ('trash_retention_days', '60')");
             Execute(conn, "PRAGMA user_version = 1");
         }
+
+        if (version < 2)
+        {
+            // Санминимум у студентов больше не ведётся: колонку заменяет диспансерный учёт.
+            AddColumnIfMissing(conn, "students", "dispensary_registered", "INTEGER NOT NULL DEFAULT 0");
+            AddColumnIfMissing(conn, "students", "dispensary_details", "TEXT NOT NULL DEFAULT ''");
+            if (ColumnExists(conn, "students", "sanminimum_date"))
+                Execute(conn, "ALTER TABLE students DROP COLUMN sanminimum_date");
+
+            AddColumnIfMissing(conn, "appeals", "created_time", "TEXT NOT NULL DEFAULT ''");
+            AddColumnIfMissing(conn, "appeals", "student_id", "INTEGER REFERENCES students(id) ON DELETE SET NULL");
+            AddColumnIfMissing(conn, "appeals", "height_cm", "INTEGER");
+            AddColumnIfMissing(conn, "appeals", "weight_kg", "REAL");
+            AddColumnIfMissing(conn, "appeals", "temperature", "REAL");
+            AddColumnIfMissing(conn, "appeals", "bp_systolic", "INTEGER");
+            AddColumnIfMissing(conn, "appeals", "bp_diastolic", "INTEGER");
+            AddColumnIfMissing(conn, "appeals", "pulse", "INTEGER");
+            AddColumnIfMissing(conn, "appeals", "saturation", "INTEGER");
+            AddColumnIfMissing(conn, "appeals", "ambulance_called", "INTEGER NOT NULL DEFAULT 0");
+            Execute(conn, "CREATE INDEX IF NOT EXISTS idx_appeals_student ON appeals(student_id, deleted_at)");
+
+            LinkExistingAppealsToStudents(conn);
+            Execute(conn, "PRAGMA user_version = 2");
+        }
+    }
+
+    /// <summary>
+    /// Привязывает старые обращения к студентам, если ФИО (и дата рождения,
+    /// когда она указана) совпадает ровно с одним студентом и ни с одним сотрудником.
+    /// Неоднозначные обращения остаются без привязки — ФИО в них сохранено текстом.
+    /// </summary>
+    private static void LinkExistingAppealsToStudents(SqliteConnection conn)
+    {
+        const string matchingStudents = """
+            FROM students s
+            WHERE equals_ci(trim(s.last_name || ' ' || s.first_name || ' ' || s.middle_name), trim(a.sender))
+              AND (trim(a.birth_date) = '' OR s.birth_date = trim(a.birth_date))
+            """;
+        Execute(conn, $"""
+            UPDATE appeals AS a
+            SET student_id = (SELECT s.id {matchingStudents})
+            WHERE a.student_id IS NULL
+              AND (SELECT COUNT(*) {matchingStudents}) = 1
+              AND NOT EXISTS (
+                  SELECT 1 FROM employees e
+                  WHERE equals_ci(trim(e.last_name || ' ' || e.first_name || ' ' || e.middle_name), trim(a.sender))
+              )
+            """);
+    }
+
+    /// <summary>
+    /// Перед обновлением схемы существующей базы сохраняет её копию в Backups.
+    /// Ежедневная автокопия могла быть сделана раньше и не содержать последних записей.
+    /// </summary>
+    private static void BackupBeforeUpgrade()
+    {
+        if (!File.Exists(Db.DbPath))
+            return;
+
+        int version;
+        bool hasData;
+        using (var conn = Db.Open())
+        {
+            version = GetSchemaVersion(conn);
+            using var cmd = conn.CreateCommand();
+            cmd.CommandText = "SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name = 'students'";
+            hasData = Convert.ToInt64(cmd.ExecuteScalar()) > 0;
+        }
+
+        if (!hasData || version >= CurrentSchemaVersion)
+            return;
+
+        BackupService.CreateUpgradeBackup(Path.Combine(
+            BackupService.BackupDirectory,
+            $"med_system_before_upgrade_v{version}_to_v{CurrentSchemaVersion}_{DateTime.Now:yyyyMMdd_HHmmss}.db"));
     }
 
     private static int GetSchemaVersion(SqliteConnection conn)

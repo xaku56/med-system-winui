@@ -41,6 +41,15 @@ public static class Db
                     new[] { sanminimum ?? "", medicalExam ?? "", fluorography ?? "" });
                 return (isExpired ? 1 : 0) | (isExpiring ? 2 : 0);
             });
+        // Студенты: санминимум не ведётся, статус по медосмотру и флюорографии.
+        conn.CreateFunction<string?, string?, int>(
+            "person_status",
+            (medicalExam, fluorography) =>
+            {
+                var (isExpired, isExpiring) = ExpirationRules.GetPersonStatus(
+                    new[] { medicalExam ?? "", fluorography ?? "" });
+                return (isExpired ? 1 : 0) | (isExpiring ? 2 : 0);
+            });
         conn.CreateFunction<string?, int>(
             "medicine_status",
             expirationDate =>

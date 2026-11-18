@@ -14,8 +14,14 @@ public static class AppealRepository
 {
     private const string Columns = """
         id, number, created_at, sender, birth_date, parent_phone,
-        group_name, complaints, diagnosis, actions_recommendations
+        group_name, complaints, diagnosis, actions_recommendations,
+        created_time, student_id, height_cm, weight_kg, temperature,
+        bp_systolic, bp_diastolic, pulse, saturation, ambulance_called
         """;
+
+    /// <summary>Дата "дд.мм.гггг" → "гггг-мм-дд" для сортировки в SQL.</summary>
+    private const string SortableDateSql =
+        "substr(created_at, 7, 4) || substr(created_at, 4, 2) || substr(created_at, 1, 2)";
 
     public static PageResult<Appeal> GetPage(AppealPageRequest request)
     {
@@ -68,6 +74,24 @@ public static class AppealRepository
         return reader.Read() ? Map(reader) : null;
     }
 
+    /// <summary>История обращений студента: новые сверху.</summary>
+    public static List<Appeal> GetByStudent(long studentId)
+    {
+        using var conn = Db.Open();
+        using var cmd = conn.CreateCommand();
+        cmd.CommandText = $"""
+            SELECT {Columns} FROM appeals
+            WHERE student_id = $studentId AND deleted_at IS NULL
+            ORDER BY {SortableDateSql} DESC, created_time DESC, number DESC, id DESC
+            """;
+        cmd.Parameters.AddWithValue("$studentId", studentId);
+        using var reader = cmd.ExecuteReader();
+        var items = new List<Appeal>();
+        while (reader.Read())
+            items.Add(Map(reader));
+        return items;
+    }
+
     public static long GetNextNumber()
     {
         using var conn = Db.Open();
@@ -85,10 +109,14 @@ public static class AppealRepository
         cmd.CommandText = """
             INSERT INTO appeals (
                 number, created_at, sender, birth_date, parent_phone,
-                group_name, complaints, diagnosis, actions_recommendations
+                group_name, complaints, diagnosis, actions_recommendations,
+                created_time, student_id, height_cm, weight_kg, temperature,
+                bp_systolic, bp_diastolic, pulse, saturation, ambulance_called
             ) VALUES (
                 $number, $createdAt, $sender, $birthDate, $parentPhone,
-                $groupName, $complaints, $diagnosis, $actions
+                $groupName, $complaints, $diagnosis, $actions,
+                $createdTime, $studentId, $heightCm, $weightKg, $temperature,
+                $bpSystolic, $bpDiastolic, $pulse, $saturation, $ambulanceCalled
             )
             """;
         AddParameters(cmd, a);
@@ -104,7 +132,11 @@ public static class AppealRepository
                 number = $number, created_at = $createdAt, sender = $sender,
                 birth_date = $birthDate, parent_phone = $parentPhone,
                 group_name = $groupName, complaints = $complaints,
-                diagnosis = $diagnosis, actions_recommendations = $actions
+                diagnosis = $diagnosis, actions_recommendations = $actions,
+                created_time = $createdTime, student_id = $studentId,
+                height_cm = $heightCm, weight_kg = $weightKg, temperature = $temperature,
+                bp_systolic = $bpSystolic, bp_diastolic = $bpDiastolic,
+                pulse = $pulse, saturation = $saturation, ambulance_called = $ambulanceCalled
             WHERE id = $id AND deleted_at IS NULL
             """;
         AddParameters(cmd, a);
@@ -125,17 +157,17 @@ public static class AppealRepository
         using var conn = Db.Open();
         using var cmd = conn.CreateCommand();
         cmd.CommandText = """
-            SELECT last_name, first_name, middle_name, birth_date, context, person_type
+            SELECT last_name, first_name, middle_name, birth_date, context, person_type, person_id
             FROM (
                 SELECT last_name, first_name, middle_name, birth_date,
-                       affiliation AS context, 0 AS person_type
+                       affiliation AS context, 0 AS person_type, id AS person_id
                 FROM employees
                 WHERE deleted_at IS NULL AND archived_at IS NULL
                   AND (contains_ci(last_name || ' ' || first_name || ' ' || middle_name, $query)
                        OR contains_ci(affiliation, $query))
                 UNION ALL
                 SELECT s.last_name, s.first_name, s.middle_name, s.birth_date,
-                       g.name AS context, 1 AS person_type
+                       g.name AS context, 1 AS person_type, s.id AS person_id
                 FROM students s
                 LEFT JOIN groups g ON s.group_id = g.id
                 WHERE s.deleted_at IS NULL AND s.archived_at IS NULL
@@ -163,6 +195,7 @@ public static class AppealRepository
                     : string.IsNullOrWhiteSpace(context) ? $"{fio} (Сотрудник)" : $"{fio} (Сотрудник, {context})",
                 BirthDate = reader.GetString(3),
                 GroupName = context,
+                StudentId = isStudent ? reader.GetInt64(6) : 0,
             });
         }
         return persons;
@@ -180,6 +213,16 @@ public static class AppealRepository
         Complaints = r.GetString(7),
         Diagnosis = r.GetString(8),
         ActionsRecommendations = r.GetString(9),
+        CreatedTime = r.GetString(10),
+        StudentId = r.IsDBNull(11) ? null : r.GetInt64(11),
+        HeightCm = r.IsDBNull(12) ? null : r.GetInt32(12),
+        WeightKg = r.IsDBNull(13) ? null : r.GetDouble(13),
+        Temperature = r.IsDBNull(14) ? null : r.GetDouble(14),
+        BloodPressureSystolic = r.IsDBNull(15) ? null : r.GetInt32(15),
+        BloodPressureDiastolic = r.IsDBNull(16) ? null : r.GetInt32(16),
+        Pulse = r.IsDBNull(17) ? null : r.GetInt32(17),
+        Saturation = r.IsDBNull(18) ? null : r.GetInt32(18),
+        AmbulanceCalled = r.GetInt64(19) != 0,
     };
 
     private static void AddParameters(Microsoft.Data.Sqlite.SqliteCommand cmd, Appeal a)
@@ -193,5 +236,15 @@ public static class AppealRepository
         cmd.Parameters.AddWithValue("$complaints", a.Complaints);
         cmd.Parameters.AddWithValue("$diagnosis", a.Diagnosis);
         cmd.Parameters.AddWithValue("$actions", a.ActionsRecommendations);
+        cmd.Parameters.AddWithValue("$createdTime", a.CreatedTime);
+        cmd.Parameters.AddWithValue("$studentId", a.StudentId is > 0 ? a.StudentId.Value : DBNull.Value);
+        cmd.Parameters.AddWithValue("$heightCm", (object?)a.HeightCm ?? DBNull.Value);
+        cmd.Parameters.AddWithValue("$weightKg", (object?)a.WeightKg ?? DBNull.Value);
+        cmd.Parameters.AddWithValue("$temperature", (object?)a.Temperature ?? DBNull.Value);
+        cmd.Parameters.AddWithValue("$bpSystolic", (object?)a.BloodPressureSystolic ?? DBNull.Value);
+        cmd.Parameters.AddWithValue("$bpDiastolic", (object?)a.BloodPressureDiastolic ?? DBNull.Value);
+        cmd.Parameters.AddWithValue("$pulse", (object?)a.Pulse ?? DBNull.Value);
+        cmd.Parameters.AddWithValue("$saturation", (object?)a.Saturation ?? DBNull.Value);
+        cmd.Parameters.AddWithValue("$ambulanceCalled", a.AmbulanceCalled ? 1 : 0);
     }
 }

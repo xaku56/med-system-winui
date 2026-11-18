@@ -76,13 +76,13 @@
                         <ColumnDefinition Width="*" />
                         <ColumnDefinition Width="*" />
                         <ColumnDefinition Width="*" />
-                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="1.3*" />
                     </Grid.ColumnDefinitions>
                     <TextBlock Grid.Column="0" Text="ФИО" FontSize="12" Opacity="0.6" />
                     <TextBlock Grid.Column="1" Text="Группа" FontSize="12" Opacity="0.6" />
-                    <TextBlock Grid.Column="2" Text="Санминимум" FontSize="12" Opacity="0.6" />
-                    <TextBlock Grid.Column="3" Text="Медосмотр" FontSize="12" Opacity="0.6" />
-                    <TextBlock Grid.Column="4" Text="Флюорография" FontSize="12" Opacity="0.6" />
+                    <TextBlock Grid.Column="2" Text="Медосмотр" FontSize="12" Opacity="0.6" />
+                    <TextBlock Grid.Column="3" Text="Флюорография" FontSize="12" Opacity="0.6" />
+                    <TextBlock Grid.Column="4" Text="Диспансерный учёт" FontSize="12" Opacity="0.6" />
                 </Grid>
                 <Rectangle Grid.Row="1" Height="1" HorizontalAlignment="Stretch"
                            Fill="{ThemeResource DividerStrokeColorDefaultBrush}" />
@@ -93,8 +93,10 @@
                             <Grid Padding="4,10" Background="Transparent">
                                 <Grid.ContextFlyout>
                                     <MenuFlyout>
-                                        <MenuFlyoutItem Text="Открыть / Редактировать"
+                                        <MenuFlyoutItem Text="Открыть карточку"
                                                         Tag="{x:Bind Id}" Click="OpenMenuItem_Click" />
+                                        <MenuFlyoutItem Text="Редактировать"
+                                                        Tag="{x:Bind Id}" Click="EditMenuItem_Click" />
                                         <MenuFlyoutSeparator />
                                         <MenuFlyoutItem Text="Архивировать"
                                                         Visibility="{x:Bind ArchiveVisibility}"
@@ -111,7 +113,7 @@
                                     <ColumnDefinition Width="*" />
                                     <ColumnDefinition Width="*" />
                                     <ColumnDefinition Width="*" />
-                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="1.3*" />
                                 </Grid.ColumnDefinitions>
                                 <StackPanel Grid.Column="0" VerticalAlignment="Center">
                                     <TextBlock Text="{x:Bind FullName}" />
@@ -120,18 +122,17 @@
                                                FontSize="12" Opacity="0.6" />
                                 </StackPanel>
                                 <TextBlock Grid.Column="1" Text="{x:Bind GroupName}" Opacity="0.8" VerticalAlignment="Center" />
-                                <Border Grid.Column="2" Background="{x:Bind SanminimumBg}" CornerRadius="4"
-                                Padding="10,2" HorizontalAlignment="Left" VerticalAlignment="Center">
-                            <TextBlock Text="{x:Bind Sanminimum}" Foreground="{x:Bind SanminimumFg}" FontSize="12" />
-                        </Border>
-                                <Border Grid.Column="3" Background="{x:Bind MedicalExamBg}" CornerRadius="4"
-                                Padding="10,2" HorizontalAlignment="Left" VerticalAlignment="Center">
-                            <TextBlock Text="{x:Bind MedicalExam}" Foreground="{x:Bind MedicalExamFg}" FontSize="12" />
-                        </Border>
-                                <Border Grid.Column="4" Background="{x:Bind FluorographyBg}" CornerRadius="4"
-                                Padding="10,2" HorizontalAlignment="Left" VerticalAlignment="Center">
-                            <TextBlock Text="{x:Bind Fluorography}" Foreground="{x:Bind FluorographyFg}" FontSize="12" />
-                        </Border>
+                                <Border Grid.Column="2" Background="{x:Bind MedicalExamBg}" CornerRadius="4"
+                                        Padding="10,2" HorizontalAlignment="Left" VerticalAlignment="Center">
+                                    <TextBlock Text="{x:Bind MedicalExam}" Foreground="{x:Bind MedicalExamFg}" FontSize="12" />
+                                </Border>
+                                <Border Grid.Column="3" Background="{x:Bind FluorographyBg}" CornerRadius="4"
+                                        Padding="10,2" HorizontalAlignment="Left" VerticalAlignment="Center">
+                                    <TextBlock Text="{x:Bind Fluorography}" Foreground="{x:Bind FluorographyFg}" FontSize="12" />
+                                </Border>
+                                <TextBlock Grid.Column="4" Text="{x:Bind Dispensary}" Opacity="0.8"
+                                           VerticalAlignment="Center" TextTrimming="CharacterEllipsis"
+                                           ToolTipService.ToolTip="{x:Bind Dispensary}" />
                             </Grid>
                         </DataTemplate>
                     </ListView.ItemTemplate>

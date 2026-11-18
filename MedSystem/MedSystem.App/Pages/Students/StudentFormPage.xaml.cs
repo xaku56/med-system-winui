@@ -52,11 +52,19 @@ namespace MedSystem.App.Pages
             GroupBox.SelectedValue = s.GroupId;
             OmsBox.Text = s.Oms;
             AddressBox.Text = s.Address;
-            SanminimumBox.Text = s.SanminimumDate;
             MedicalExamBox.Text = s.MedicalExamDate;
             FluorographyBox.Text = s.FluorographyDate;
             HealthGroupBox.Text = s.HealthGroup;
+            DispensaryToggle.IsOn = s.IsOnDispensaryRegister;
+            DispensaryDetailsBox.Text = s.DispensaryDetails;
+            UpdateDispensaryDetailsVisibility();
         }
+
+        private void DispensaryToggle_Toggled(object sender, RoutedEventArgs e) =>
+            UpdateDispensaryDetailsVisibility();
+
+        private void UpdateDispensaryDetailsVisibility() =>
+            DispensaryDetailsBox.Visibility = DispensaryToggle.IsOn ? Visibility.Visible : Visibility.Collapsed;
 
         private Student CollectForm() => new()
         {
@@ -68,10 +76,11 @@ namespace MedSystem.App.Pages
             BirthDate = BirthDateBox.Text.Trim(),
             Oms = OmsBox.Text.Trim(),
             Address = AddressBox.Text.Trim(),
-            SanminimumDate = SanminimumBox.Text.Trim(),
             MedicalExamDate = MedicalExamBox.Text.Trim(),
             FluorographyDate = FluorographyBox.Text.Trim(),
             HealthGroup = HealthGroupBox.Text.Trim(),
+            IsOnDispensaryRegister = DispensaryToggle.IsOn,
+            DispensaryDetails = DispensaryToggle.IsOn ? DispensaryDetailsBox.Text.Trim() : "",
         };
 
         private async void SaveButton_Click(object sender, RoutedEventArgs e)

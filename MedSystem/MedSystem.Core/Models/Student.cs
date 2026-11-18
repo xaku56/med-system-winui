@@ -13,11 +13,20 @@ public class Student
     public string BirthDate { get; set; } = "";
     public string Oms { get; set; } = "";
     public string Address { get; set; } = "";
-    public string SanminimumDate { get; set; } = "";
     public string MedicalExamDate { get; set; } = "";
     public string FluorographyDate { get; set; } = "";
     public string HealthGroup { get; set; } = "";
+    /// <summary>Состоит ли студент на диспансерном учёте.</summary>
+    public bool IsOnDispensaryRegister { get; set; }
+    /// <summary>У кого состоит на учёте (свободный текст, необязательно).</summary>
+    public string DispensaryDetails { get; set; } = "";
     public string ArchiveReason { get; set; } = "";
+    public bool IsArchived { get; set; }
 
     public string FullName => $"{LastName} {FirstName} {MiddleName}".Trim();
+
+    /// <summary>«Да — у кардиолога», «Да» или «Нет».</summary>
+    public string DispensaryDisplay => !IsOnDispensaryRegister
+        ? "Нет"
+        : string.IsNullOrWhiteSpace(DispensaryDetails) ? "Да" : $"Да — {DispensaryDetails}";
 }

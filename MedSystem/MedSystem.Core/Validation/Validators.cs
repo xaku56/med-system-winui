@@ -18,6 +18,43 @@ public static class Validators
     public static bool IsValidDate(string value) =>
         ExpirationRules.TryParseDate(value, out _);
 
+    /// <summary>
+    /// Необязательное число из поля формы: пусто → null; принимает и запятую, и точку.
+    /// </summary>
+    public static bool TryParseOptionalNumber(string? text, out double? value)
+    {
+        value = null;
+        var normalized = (text ?? "").Trim().Replace(',', '.');
+        if (normalized.Length == 0)
+            return true;
+        if (!double.TryParse(normalized, System.Globalization.NumberStyles.AllowDecimalPoint,
+                System.Globalization.CultureInfo.InvariantCulture, out var parsed))
+            return false;
+        value = parsed;
+        return true;
+    }
+
+    /// <summary>Необязательное целое из поля формы: пусто → null.</summary>
+    public static bool TryParseOptionalInteger(string? text, out int? value)
+    {
+        value = null;
+        var trimmed = (text ?? "").Trim();
+        if (trimmed.Length == 0)
+            return true;
+        if (!int.TryParse(trimmed, System.Globalization.NumberStyles.None,
+                System.Globalization.CultureInfo.InvariantCulture, out var parsed))
+            return false;
+        value = parsed;
+        return true;
+    }
+
+    public const string TimeFormat = "HH:mm";
+
+    /// <summary>Время "чч:мм" в 24-часовом формате.</summary>
+    public static bool IsValidTime(string value) =>
+        TimeOnly.TryParseExact(value, TimeFormat, System.Globalization.CultureInfo.InvariantCulture,
+            System.Globalization.DateTimeStyles.None, out _);
+
     public static List<string> ValidateEmployee(Employee e)
     {
         var errors = new List<string>();
@@ -56,9 +93,10 @@ public static class Validators
 
         CheckDigits(errors, s.Oms, "ОМС", 16);
         CheckText(errors, s.Address, "Адрес проживания", maxLength: 255, required: false);
-        CheckDate(errors, s.SanminimumDate, "Дата санминимума", required: false);
         CheckDate(errors, s.MedicalExamDate, "Дата медосмотра", required: false);
         CheckDate(errors, s.FluorographyDate, "Дата флюорографии", required: false);
+        CheckText(errors, s.HealthGroup, "Группа здоровья", maxLength: 100, required: false);
+        CheckText(errors, s.DispensaryDetails, "У кого состоит на учёте", maxLength: 255, required: false);
 
         return errors;
     }
@@ -80,11 +118,24 @@ public static class Validators
         if (a.Number <= 0)
             errors.Add("Номер обращения должен быть положительным числом.");
         CheckDate(errors, a.CreatedAt, "Дата обращения");
+        if (!string.IsNullOrWhiteSpace(a.CreatedTime) && !IsValidTime(a.CreatedTime))
+            errors.Add("Поле 'Время обращения' должно быть в формате ЧЧ:ММ.");
         CheckText(errors, a.Sender, "Отправитель", maxLength: 255);
         CheckDate(errors, a.BirthDate, "Дата рождения", required: false);
         CheckText(errors, a.ParentPhone, "Телефон родителя", maxLength: 20, required: false);
         CheckText(errors, a.GroupName, "Группа / принадлежность", maxLength: 64, required: false);
         CheckText(errors, a.Complaints, "Жалобы", maxLength: 2000);
+        CheckRange(errors, a.HeightCm, "Рост, см", 50, 250);
+        CheckRange(errors, a.WeightKg, "Вес, кг", 10, 300);
+        CheckRange(errors, a.Temperature, "Температура, °C", 34, 43);
+        CheckRange(errors, a.BloodPressureSystolic, "Давление: верхнее", 60, 260);
+        CheckRange(errors, a.BloodPressureDiastolic, "Давление: нижнее", 30, 160);
+        if (a.BloodPressureSystolic is null != a.BloodPressureDiastolic is null)
+            errors.Add("Укажите оба значения давления: верхнее и нижнее.");
+        else if (a.BloodPressureSystolic <= a.BloodPressureDiastolic)
+            errors.Add("Верхнее давление должно быть больше нижнего.");
+        CheckRange(errors, a.Pulse, "Пульс, уд/мин", 30, 220);
+        CheckRange(errors, a.Saturation, "Сатурация, %", 50, 100);
         CheckText(errors, a.Diagnosis, "Диагноз", maxLength: 255, required: false);
         CheckText(errors, a.ActionsRecommendations, "Действия и рекомендации", maxLength: 2000, required: false);
         return errors;
@@ -125,6 +176,12 @@ public static class Validators
         }
         else if (!IsValidDate(value))
             errors.Add($"Поле '{label}' должно быть в формате ДД.ММ.ГГГГ и корректной датой.");
+    }
+
+    private static void CheckRange(List<string> errors, double? value, string label, double min, double max)
+    {
+        if (value is { } v && (double.IsNaN(v) || v < min || v > max))
+            errors.Add($"Поле '{label}' должно быть от {min} до {max}.");
     }
 
     private static void CheckDigits(List<string> errors, string value, string label, int exactLength)

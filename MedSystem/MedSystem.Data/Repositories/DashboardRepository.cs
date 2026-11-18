@@ -22,8 +22,10 @@ public static class DashboardRepository
     public static DashboardSnapshot GetSnapshot(int lowMedicineThreshold)
     {
         using var conn = Db.Open();
-        var employees = GetPeopleStats(conn, "employees");
-        var students = GetPeopleStats(conn, "students");
+        var employees = GetPeopleStats(conn, "employees",
+            "person_status(sanminimum_date, medical_exam_date, fluorography_date)");
+        var students = GetPeopleStats(conn, "students",
+            "person_status(medical_exam_date, fluorography_date)");
 
         using var medicines = conn.CreateCommand();
         medicines.CommandText = """
@@ -79,13 +81,14 @@ public static class DashboardRepository
 
     private static (long Total, long Expired, long Expiring) GetPeopleStats(
         Microsoft.Data.Sqlite.SqliteConnection conn,
-        string table)
+        string table,
+        string statusSql)
     {
         using var cmd = conn.CreateCommand();
         cmd.CommandText = $"""
             SELECT COUNT(*),
-                   COALESCE(SUM((person_status(sanminimum_date, medical_exam_date, fluorography_date) & 1) <> 0), 0),
-                   COALESCE(SUM((person_status(sanminimum_date, medical_exam_date, fluorography_date) & 2) <> 0), 0)
+                   COALESCE(SUM(({statusSql} & 1) <> 0), 0),
+                   COALESCE(SUM(({statusSql} & 2) <> 0), 0)
             FROM {table}
             WHERE deleted_at IS NULL AND archived_at IS NULL
             """;
