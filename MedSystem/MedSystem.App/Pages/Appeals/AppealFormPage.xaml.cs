@@ -66,6 +66,7 @@ namespace MedSystem.App.Pages
                 }
             }
             UpdateStudentLinkText();
+            LoadTemplates();
         }
 
         protected override void OnNavigatedFrom(NavigationEventArgs e)
@@ -231,7 +232,103 @@ namespace MedSystem.App.Pages
             }
         }
 
+        private void LoadTemplates(string? selected = null)
+        {
+            try
+            {
+                TemplateBox.ItemsSource = ComplaintTemplateRepository.GetAll();
+                TemplateBox.SelectedItem = selected;
+                TemplateErrorBar.IsOpen = false;
+            }
+            catch (Exception ex)
+            {
+                TemplateErrorBar.Message = ex.Message;
+                TemplateErrorBar.IsOpen = true;
+            }
+        }
+
+        private void TemplateBox_SelectionChanged(object sender, SelectionChangedEventArgs e)
+        {
+            var selected = TemplateBox.SelectedItem is string;
+            InsertTemplateButton.IsEnabled = selected;
+            EditTemplateItem.IsEnabled = selected;
+            DeleteTemplateItem.IsEnabled = selected;
+        }
+
+        private async void InsertTemplate_Click(object sender, RoutedEventArgs e)
+        {
+            if (TemplateBox.SelectedItem is not string text)
+                return;
+            try
+            {
+                ComplaintsBox.Text = ComplaintTemplates.Append(ComplaintsBox.Text, text);
+                ComplaintsBox.SelectionStart = ComplaintsBox.Text.Length;
+                ComplaintsBox.Focus(FocusState.Programmatic);
+            }
+            catch (ArgumentException ex)
+            {
+                await Dialogs.MessageAsync(this, "Не удалось вставить шаблон", ex.Message);
+            }
+        }
+
+        private async void AddTemplate_Click(object sender, RoutedEventArgs e) =>
+            await EditTemplateAsync(null);
+
+        private async void EditTemplate_Click(object sender, RoutedEventArgs e)
+        {
+            if (TemplateBox.SelectedItem is string text)
+                await EditTemplateAsync(text);
+        }
+
+        private async Task EditTemplateAsync(string? original)
+        {
+            var box = new TextBox
+            {
+                Header = "Текст жалобы", Text = original ?? "", MinWidth = 280,
+                AcceptsReturn = true, TextWrapping = TextWrapping.Wrap, MaxLength = ComplaintTemplates.MaxLength,
+            };
+            if (!await Dialogs.ConfirmAsync(this, original == null ? "Новый шаблон" : "Изменение шаблона",
+                box, "Сохранить"))
+                return;
+            try
+            {
+                ComplaintTemplateRepository.Save(original, box.Text);
+                LoadTemplates(box.Text.Trim());
+            }
+            catch (Exception ex)
+            {
+                await Dialogs.MessageAsync(this, "Не удалось сохранить шаблон", ex.Message);
+            }
+        }
+
+        private async void DeleteTemplate_Click(object sender, RoutedEventArgs e)
+        {
+            if (TemplateBox.SelectedItem is not string text ||
+                !await Dialogs.ConfirmAsync(this, "Удаление шаблона", $"Удалить шаблон «{text}»?", "Удалить"))
+                return;
+            try
+            {
+                ComplaintTemplateRepository.Delete(text);
+                LoadTemplates();
+            }
+            catch (Exception ex)
+            {
+                await Dialogs.MessageAsync(this, "Не удалось удалить шаблон", ex.Message);
+            }
+        }
+
         // ── Автодополнение диагноза по МКБ ───────────────────────────
+
+        private async void ChooseDiagnosis_Click(object sender, RoutedEventArgs e)
+        {
+            if (await DiagnosisPicker.PickAsync(this) is { } code)
+            {
+                _diagnosisSearchCancellation?.Cancel();
+                DiagnosisBox.ItemsSource = null;
+                DiagnosisBox.IsSuggestionListOpen = false;
+                DiagnosisBox.Text = $"{code.Code} - {code.Name}";
+            }
+        }
 
         private async void DiagnosisBox_TextChanged(
             AutoSuggestBox sender,

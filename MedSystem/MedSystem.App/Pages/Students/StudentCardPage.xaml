@@ -67,6 +67,7 @@
                 <Grid.RowDefinitions>
                     <RowDefinition Height="Auto" />
                     <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
                 </Grid.RowDefinitions>
 
                 <StackPanel Grid.Row="0" Grid.Column="0" Spacing="2">
@@ -77,13 +78,9 @@
                     <TextBlock Text="Полис ОМС" Style="{StaticResource CardLabelStyle}" />
                     <TextBlock x:Name="OmsText" Style="{StaticResource CardValueStyle}" />
                 </StackPanel>
-                <StackPanel Grid.Row="0" Grid.Column="2" Spacing="2">
+                <StackPanel Grid.Row="0" Grid.Column="2" Grid.ColumnSpan="2" Spacing="2">
                     <TextBlock Text="Группа здоровья" Style="{StaticResource CardLabelStyle}" />
                     <TextBlock x:Name="HealthGroupText" Style="{StaticResource CardValueStyle}" />
-                </StackPanel>
-                <StackPanel Grid.Row="0" Grid.Column="3" Spacing="2">
-                    <TextBlock Text="Диспансерный учёт" Style="{StaticResource CardLabelStyle}" />
-                    <TextBlock x:Name="DispensaryText" Style="{StaticResource CardValueStyle}" />
                 </StackPanel>
 
                 <StackPanel Grid.Row="1" Grid.Column="0" Spacing="4">
@@ -103,6 +100,12 @@
                 <StackPanel Grid.Row="1" Grid.Column="2" Grid.ColumnSpan="2" Spacing="2">
                     <TextBlock Text="Адрес проживания" Style="{StaticResource CardLabelStyle}" />
                     <TextBlock x:Name="AddressText" Style="{StaticResource CardValueStyle}" />
+                </StackPanel>
+                <StackPanel Grid.Row="2" Grid.ColumnSpan="4" Spacing="2">
+                    <TextBlock Text="Диспансерный учёт" Style="{StaticResource CardLabelStyle}" />
+                    <ScrollViewer MaxHeight="110" VerticalScrollBarVisibility="Auto">
+                        <TextBlock x:Name="DispensaryText" Style="{StaticResource CardValueStyle}" />
+                    </ScrollViewer>
                 </StackPanel>
             </Grid>
         </Border>

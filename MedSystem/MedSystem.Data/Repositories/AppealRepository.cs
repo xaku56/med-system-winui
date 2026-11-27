@@ -92,6 +92,31 @@ public static class AppealRepository
         return items;
     }
 
+    public static List<Appeal> GetByDay(DateOnly day)
+    {
+        using var conn = Db.Open();
+        using var cmd = conn.CreateCommand();
+        cmd.CommandText = $"""
+            SELECT {Columns}, EXISTS (
+                SELECT 1 FROM students s WHERE s.id = a.student_id AND s.deleted_at IS NULL
+            ) FROM appeals a
+            WHERE a.created_at = $date AND a.deleted_at IS NULL
+            ORDER BY (created_time = ''), created_time, number, id
+            """;
+        cmd.Parameters.AddWithValue("$date", day.ToString(ExpirationRules.DateFormat,
+            System.Globalization.CultureInfo.InvariantCulture));
+        using var reader = cmd.ExecuteReader();
+        var items = new List<Appeal>();
+        while (reader.Read())
+        {
+            var appeal = Map(reader);
+            if (!reader.GetBoolean(20))
+                appeal.StudentId = null;
+            items.Add(appeal);
+        }
+        return items;
+    }
+
     public static long GetNextNumber()
     {
         using var conn = Db.Open();

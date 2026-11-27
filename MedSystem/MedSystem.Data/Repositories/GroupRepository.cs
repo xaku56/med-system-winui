@@ -108,9 +108,16 @@ public static class GroupRepository
 
     public static int ArchiveWithStudents(long id, string reason)
     {
-        var archivedAt = DateTime.UtcNow.ToString("O");
         using var conn = Db.Open();
         using var tx = conn.BeginTransaction();
+        var count = ArchiveWithStudents(conn, id, reason);
+        tx.Commit();
+        return count;
+    }
+
+    private static int ArchiveWithStudents(SqliteConnection conn, long id, string reason)
+    {
+        var archivedAt = DateTime.UtcNow.ToString("O");
 
         using (var group = conn.CreateCommand())
         {
@@ -140,7 +147,6 @@ public static class GroupRepository
             studentCount = students.ExecuteNonQuery();
         }
 
-        tx.Commit();
         return studentCount;
     }
 
@@ -186,45 +192,34 @@ public static class GroupRepository
         return studentCount;
     }
 
-    /// <summary>Увеличивает первую цифру в названиях групп (11-А → 21-А).</summary>
-    public static int IncrementFirstDigitInAllGroups()
-    {
-        using var conn = Db.Open();
-        using var tx = conn.BeginTransaction();
-        var count = IncrementGroups(conn);
-        tx.Commit();
-        return count;
-    }
+    public static int IncrementFirstDigitInAllGroups() =>
+        AdvanceAcademicYear(DateTime.Today, manual: true);
 
-    /// <summary>
-    /// После даты начала учебного года — один раз в год автоматически
-    /// переводит группы на следующий курс. Возвращает число обновлённых групп.
-    /// </summary>
-    public static int CheckAndAutoIncrementGroups()
+    public static int CheckAndAutoIncrementGroups() => AdvanceAcademicYear(DateTime.Today);
+
+    internal static int AdvanceAcademicYear(DateTime date, bool manual = false)
     {
-        var now = DateTime.Now;
         var (month, day) = AcademicYearRollover;
-        if (now.Month < month || (now.Month == month && now.Day < day))
-            return 0;
-
-        var currentYear = now.Year.ToString();
-
+        var beforeRollover = date.Date < new DateTime(date.Year, month, day);
+        var year = beforeRollover && !manual ? date.Year - 1 : date.Year;
         using var conn = Db.Open();
         using var tx = conn.BeginTransaction();
-
         using var check = conn.CreateCommand();
         check.CommandText = "SELECT value FROM system_info WHERE key = 'last_group_increment_year'";
-        var lastYear = check.ExecuteScalar() as string;
-        if (lastYear == currentYear)
+        var hasPrevious = int.TryParse(check.ExecuteScalar() as string, out var previous);
+        if (hasPrevious ? previous >= year : beforeRollover && !manual)
             return 0;
 
-        var count = IncrementGroups(conn);
+        int count = 0;
+        // За четыре пропущенных перевода выпускаются даже первокурсники.
+        var steps = hasPrevious ? Math.Min(4L, (long)year - previous) : 1;
+        for (var i = 0; i < steps; i++)
+            count += IncrementGroups(conn);
 
         using var save = conn.CreateCommand();
         save.CommandText = "INSERT OR REPLACE INTO system_info (key, value) VALUES ('last_group_increment_year', $year)";
-        save.Parameters.AddWithValue("$year", currentYear);
+        save.Parameters.AddWithValue("$year", year.ToString(System.Globalization.CultureInfo.InvariantCulture));
         save.ExecuteNonQuery();
-
         tx.Commit();
         return count;
     }
@@ -234,45 +229,31 @@ public static class GroupRepository
         var groups = new List<(long Id, string Name)>();
         using (var cmd = conn.CreateCommand())
         {
-            cmd.CommandText = "SELECT id, name FROM groups WHERE deleted_at IS NULL AND archived_at IS NULL";
+            // Сначала освобождаем названия старших курсов.
+            cmd.CommandText = """
+                SELECT id, name FROM groups
+                WHERE deleted_at IS NULL AND archived_at IS NULL AND substr(name, 1, 1) IN ('1','2','3','4')
+                ORDER BY name DESC
+                """;
             using var reader = cmd.ExecuteReader();
             while (reader.Read())
                 groups.Add((reader.GetInt64(0), reader.GetString(1)));
         }
 
-        var toUpdate = new List<(long Id, string OldName, string NewName, int FirstDigit)>();
         foreach (var (id, name) in groups)
         {
-            if (name.Length > 0 && char.IsDigit(name[0]))
+            if (name[0] == '4')
             {
-                var firstDigit = name[0] - '0';
-                var newName = (firstDigit + 1).ToString() + name[1..];
-                if (newName != name)
-                    toUpdate.Add((id, name, newName, firstDigit));
+                ArchiveWithStudents(conn, id, "Выпуск");
+                continue;
             }
-        }
 
-        // По убыванию первой цифры, чтобы не нарушить UNIQUE
-        toUpdate.Sort((a, b) => b.FirstDigit.CompareTo(a.FirstDigit));
-
-        var count = 0;
-        foreach (var (id, oldName, newName, _) in toUpdate)
-        {
-            try
-            {
-                using var cmd = conn.CreateCommand();
-                cmd.CommandText = "UPDATE groups SET name = $name WHERE id = $id";
-                cmd.Parameters.AddWithValue("$name", newName);
-                cmd.Parameters.AddWithValue("$id", id);
-                cmd.ExecuteNonQuery();
-                count++;
-            }
-            catch (SqliteException ex) when (ex.SqliteErrorCode == 19)
-            {
-                throw new InvalidOperationException(
-                    $"Не удалось перевести группу '{oldName}': группа '{newName}' уже существует.");
-            }
+            using var cmd = conn.CreateCommand();
+            cmd.CommandText = "UPDATE groups SET name = $name WHERE id = $id";
+            cmd.Parameters.AddWithValue("$name", (char)(name[0] + 1) + name[1..]);
+            cmd.Parameters.AddWithValue("$id", id);
+            cmd.ExecuteNonQuery();
         }
-        return count;
+        return groups.Count;
     }
 }

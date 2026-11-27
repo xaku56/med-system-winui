@@ -20,6 +20,7 @@
             <TextBlock Text="Студенты" Style="{StaticResource TitleTextBlockStyle}" />
             <StackPanel Orientation="Horizontal" Spacing="12" HorizontalAlignment="Right">
                 <TextBlock x:Name="CountText" Text="" VerticalAlignment="Center" Opacity="0.6" />
+                <Button x:Name="ImportButton" Content="Импорт DOCX" Click="ImportButton_Click" />
                 <Button Content="Группы" Click="GroupsButton_Click" />
                 <Button x:Name="AddButton" Content="+ Добавить" Style="{StaticResource AccentButtonStyle}"
                         Click="AddButton_Click" />

@@ -131,6 +131,54 @@ namespace MedSystem.App.Pages
 
         // ── Добавление / изменение ───────────────────────────────────
 
+        private async void ImportButton_Click(object sender, RoutedEventArgs e)
+        {
+            ImportButton.IsEnabled = false;
+            try
+            {
+                var picker = new Microsoft.Windows.Storage.Pickers.FileOpenPicker(App.CurrentWindow!.AppWindow.Id);
+                picker.FileTypeFilter.Add(".csv");
+                picker.FileTypeFilter.Add(".tsv");
+                var file = await picker.PickSingleFileAsync();
+                if (file == null)
+                    return;
+                var codes = await Task.Run(() =>
+                {
+                    using var stream = System.IO.File.OpenRead(file.Path);
+                    if (stream.Length > 32 * 1024 * 1024)
+                        throw new System.IO.InvalidDataException("Файл превышает 32 МБ.");
+                    using var reader = new System.IO.StreamReader(stream, new System.Text.UTF8Encoding(false, true));
+                    return IcdImport.Read(reader);
+                });
+                var existing = await Task.Run(IcdRepository.GetExistingCodes);
+                var added = codes.Where(item => !existing.Contains(item.Code)).ToList();
+                var matched = codes.Where(item => existing.Contains(item.Code)).ToList();
+                var preview = $"Новых кодов: {added.Count}. Уже в справочнике: {matched.Count}.";
+                if (matched.Count > 0)
+                    preview += "\nСовпадения (сохранят свои названия): " +
+                        string.Join(", ", matched.Take(8).Select(item => item.Code));
+                if (added.Count == 0)
+                {
+                    await Dialogs.MessageAsync(this, "Импорт МКБ", preview);
+                    return;
+                }
+                preview += "\n\n" + string.Join("\n", added.Take(5).Select(item => $"{item.Code} — {item.Name}"));
+                if (!await Dialogs.ConfirmAsync(this, "Добавить диагнозы?", preview, "Импортировать"))
+                    return;
+                var count = await Task.Run(() => IcdRepository.Import(added));
+                await LoadDataAsync();
+                await Dialogs.MessageAsync(this, "Импорт завершён", $"Добавлено диагнозов: {count}.");
+            }
+            catch (Exception ex)
+            {
+                await Dialogs.MessageAsync(this, "Не удалось импортировать МКБ", ex.Message);
+            }
+            finally
+            {
+                ImportButton.IsEnabled = true;
+            }
+        }
+
         private async void AddButton_Click(object sender, RoutedEventArgs e) =>
             await ShowEditDialogAsync(null);
 

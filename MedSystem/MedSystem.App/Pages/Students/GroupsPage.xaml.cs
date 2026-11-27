@@ -224,14 +224,14 @@ namespace MedSystem.App.Pages
         private async void IncrementButton_Click(object sender, RoutedEventArgs e)
         {
             if (!await Dialogs.ConfirmAsync(this, "Перевод на следующий курс",
-                "Первая цифра в названиях всех групп увеличится (например, 11-ИС-А → 21-ИС-А). Продолжить?", "Перевести"))
+                "Группы 1–3 курсов перейдут на следующий курс. Группы 4-го курса вместе с активными студентами попадут в архив с причиной «Выпуск». Выполнить ежегодный перевод?", "Перевести"))
                 return;
 
             try
             {
                 var count = GroupRepository.IncrementFirstDigitInAllGroups();
                 await Dialogs.MessageAsync(this, "Готово",
-                    count > 0 ? $"Обновлено групп: {count}" : "Нет подходящих групп для обновления.");
+                    count > 0 ? $"Обновлено групп: {count}" : "Перевод уже выполнен или нет подходящих групп.");
                 LoadData();
             }
             catch (Exception ex)

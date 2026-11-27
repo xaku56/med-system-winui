@@ -20,9 +20,14 @@ public static class Db
     /// <summary>Открывает соединение с включёнными внешними ключами.
     /// Foreign Keys=True в строке подключения надёжнее ручного PRAGMA:
     /// применяется и к соединениям из пула.</summary>
-    public static SqliteConnection Open()
+    public static SqliteConnection Open(bool pooling = true)
     {
-        var conn = new SqliteConnection($"Data Source={DbPath};Foreign Keys=True");
+        var conn = new SqliteConnection(new SqliteConnectionStringBuilder
+        {
+            DataSource = DbPath,
+            ForeignKeys = true,
+            Pooling = pooling,
+        }.ToString());
         conn.CreateFunction<string?, string?, bool>(
             "contains_ci",
             (value, query) => !string.IsNullOrEmpty(value)

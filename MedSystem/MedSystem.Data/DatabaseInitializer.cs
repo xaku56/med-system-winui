@@ -7,7 +7,7 @@ namespace MedSystem.Data;
 /// </summary>
 public static class DatabaseInitializer
 {
-    public const int CurrentSchemaVersion = 2;
+    public const int CurrentSchemaVersion = 3;
 
     private const string EmployeesTableSql = """
         CREATE TABLE IF NOT EXISTS employees (
@@ -59,7 +59,11 @@ public static class DatabaseInitializer
     {
         BackupBeforeUpgrade();
 
-        using var conn = Db.Open();
+        // Для замены родительской таблицы groups используется отдельное соединение.
+        using var conn = Db.Open(pooling: false);
+        var rebuildGroups = GetSchemaVersion(conn) < 3;
+        if (rebuildGroups)
+            Execute(conn, "PRAGMA foreign_keys = OFF");
         using var tx = conn.BeginTransaction();
 
         Execute(conn, """
@@ -139,6 +143,13 @@ public static class DatabaseInitializer
         Execute(conn, "CREATE INDEX IF NOT EXISTS idx_appeals_active_number ON appeals(deleted_at, number DESC, id DESC)");
         Execute(conn, "CREATE INDEX IF NOT EXISTS idx_medicines_active_name ON medicines(deleted_at, name, id)");
         SeedIcdCodes(conn);
+        if (rebuildGroups)
+        {
+            using var check = conn.CreateCommand();
+            check.CommandText = "SELECT COUNT(*) FROM pragma_foreign_key_check";
+            if (Convert.ToInt64(check.ExecuteScalar()) != 0)
+                throw new InvalidOperationException("Обновление отменено: в базе нарушены связи между записями.");
+        }
 
         tx.Commit();
     }
@@ -239,6 +250,30 @@ public static class DatabaseInitializer
 
             LinkExistingAppealsToStudents(conn);
             Execute(conn, "PRAGMA user_version = 2");
+        }
+
+        if (version < 3)
+        {
+            // Старый UNIQUE(name) резервировал название группы даже после выпуска.
+            Execute(conn, """
+                CREATE TABLE groups_v3 (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL,
+                    archived_at TEXT, archive_reason TEXT, deleted_at TEXT
+                );
+                INSERT INTO groups_v3 (id, name, archived_at, archive_reason, deleted_at)
+                    SELECT id, name, archived_at, archive_reason, deleted_at FROM groups;
+                UPDATE sqlite_sequence SET seq = MAX(seq, COALESCE(
+                    (SELECT seq FROM sqlite_sequence WHERE name = 'groups'), 0))
+                    WHERE name = 'groups_v3';
+                DROP TABLE groups;
+                ALTER TABLE groups_v3 RENAME TO groups;
+                CREATE UNIQUE INDEX idx_groups_active_name ON groups(name)
+                    WHERE archived_at IS NULL AND deleted_at IS NULL;
+                CREATE INDEX idx_groups_deleted_at ON groups(deleted_at);
+                """);
+            MedicalMigration.Apply(conn);
+            AppealMigration.Apply(conn);
+            Execute(conn, "PRAGMA user_version = 3");
         }
     }
 

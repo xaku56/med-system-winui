@@ -67,6 +67,45 @@ public static class IcdRepository
         };
     }
 
+    public static HashSet<string> GetExistingCodes()
+    {
+        using var conn = Db.Open();
+        return GetExistingCodes(conn);
+    }
+
+    private static HashSet<string> GetExistingCodes(SqliteConnection conn)
+    {
+        using var cmd = conn.CreateCommand();
+        cmd.CommandText = "SELECT code FROM icd_codes";
+        using var reader = cmd.ExecuteReader();
+        var codes = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        while (reader.Read())
+            codes.Add(reader.GetString(0));
+        return codes;
+    }
+
+    public static int Import(IReadOnlyList<IcdCode> codes)
+    {
+        using var conn = Db.Open();
+        using var tx = conn.BeginTransaction();
+        var existing = GetExistingCodes(conn);
+        using var cmd = conn.CreateCommand();
+        cmd.CommandText = "INSERT INTO icd_codes (code, name) VALUES ($code, $name)";
+        var code = cmd.Parameters.Add("$code", SqliteType.Text);
+        var name = cmd.Parameters.Add("$name", SqliteType.Text);
+        int inserted = 0;
+        foreach (var item in codes)
+        {
+            if (!existing.Add(item.Code))
+                continue;
+            code.Value = item.Code;
+            name.Value = item.Name;
+            inserted += cmd.ExecuteNonQuery();
+        }
+        tx.Commit();
+        return inserted;
+    }
+
     /// <summary>Возвращает false, если код уже существует.</summary>
     public static bool Insert(string code, string name)
     {

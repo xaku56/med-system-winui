@@ -2,6 +2,8 @@ using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Linq;
+using System.IO;
+using Microsoft.Windows.Storage.Pickers;
 using System.Threading.Tasks;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
@@ -127,6 +129,7 @@ namespace MedSystem.App.Pages
                     Rows.Add(CreateRow(student, showArchived, dark));
 
                 AddButton.IsEnabled = !showArchived;
+                ImportButton.IsEnabled = !showArchived;
                 UpdatePagination();
             }, SetLoading, ex =>
             {
@@ -297,6 +300,41 @@ namespace MedSystem.App.Pages
         }
 
         // ── Действия ─────────────────────────────────────────────────
+
+        private async void ImportButton_Click(object sender, RoutedEventArgs e)
+        {
+            if (App.CurrentWindow == null) return;
+            ImportButton.IsEnabled = false;
+            try
+            {
+                var picker = new FileOpenPicker(App.CurrentWindow.AppWindow.Id);
+                picker.FileTypeFilter.Add(".docx");
+                var file = await picker.PickSingleFileAsync();
+                if (file == null || !_isPageActive) return;
+                var preview = await Task.Run(() =>
+                {
+                    using var stream = File.OpenRead(file.Path);
+                    return new StudentImport(StudentDocxReader.Read(stream));
+                });
+                if (!_isPageActive) return;
+                var dialog = new StudentImportDialog(this, preview, _groupOptions.Where(g => g.Id > 0).Select(g => g.Name).ToList());
+                await dialog.ShowAsync();
+                if (dialog.Imported > 0 && _isPageActive)
+                {
+                    LoadGroupFilter(null);
+                    await LoadDataAsync();
+                    await Dialogs.MessageAsync(this, "Импорт завершён", $"Добавлено студентов: {dialog.Imported}.");
+                }
+            }
+            catch (Exception ex)
+            {
+                if (_isPageActive) await Dialogs.MessageAsync(this, "Не удалось выполнить импорт", ex.Message);
+            }
+            finally
+            {
+                ImportButton.IsEnabled = LifecycleBox.SelectedIndex != 1;
+            }
+        }
 
         private void AddButton_Click(object sender, RoutedEventArgs e) =>
             Frame.Navigate(typeof(StudentFormPage), 0L);

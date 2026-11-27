@@ -46,7 +46,7 @@
                              Header="Полис ОМС (16 цифр)" MaxLength="16" />
                 </Grid>
 
-                <TextBox x:Name="AddressBox" Header="Адрес проживания" MaxLength="255" />
+                <TextBox x:Name="AddressBox" Header="Адрес проживания" TextWrapping="Wrap" AcceptsReturn="True" />
 
                 <TextBlock Text="Медицинские данные" Style="{StaticResource SubtitleTextBlockStyle}" Margin="0,8,0,0" />
                 <Grid ColumnSpacing="12">
@@ -61,20 +61,26 @@
                              Header="Дата флюорографии" PlaceholderText="дд.мм.гггг" MaxLength="10" />
                 </Grid>
 
-                <TextBox x:Name="HealthGroupBox" Header="Группа здоровья" MaxLength="100" />
+                <ComboBox x:Name="HealthGroupBox" Header="Группа здоровья" HorizontalAlignment="Stretch">
+                    <ComboBoxItem Content="Не указана" Tag="" IsSelected="True" />
+                    <ComboBoxItem Content="Основная" Tag="Основная" />
+                    <ComboBoxItem Content="Подготовительная" Tag="Подготовительная" />
+                    <ComboBoxItem Content="Специальная" Tag="Специальная" />
+                </ComboBox>
 
-                <Grid ColumnSpacing="12">
-                    <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width="*" />
-                        <ColumnDefinition Width="*" />
-                    </Grid.ColumnDefinitions>
-                    <ToggleSwitch x:Name="DispensaryToggle" Grid.Column="0"
-                                  Header="Диспансерный учёт" OnContent="Да" OffContent="Нет"
-                                  Toggled="DispensaryToggle_Toggled" />
-                    <TextBox x:Name="DispensaryDetailsBox" Grid.Column="1"
-                             Header="У кого состоит" PlaceholderText="Например: у кардиолога"
-                             MaxLength="255" Visibility="Collapsed" />
-                </Grid>
+                <ToggleSwitch x:Name="DispensaryToggle" Header="Диспансерный учёт" OnContent="Да" OffContent="Нет"
+                              Toggled="DispensaryToggle_Toggled" />
+                <StackPanel x:Name="ObservationsPanel" Spacing="12" Visibility="Collapsed">
+                    <StackPanel x:Name="LegacyPanel" Spacing="8" Visibility="Collapsed">
+                        <TextBox x:Name="LegacyDetailsBox" Header="Прежняя запись диспансерного учёта" MaxLength="255" />
+                        <Button Content="Указать диагноз для прежней записи" Click="CompleteLegacy_Click" />
+                    </StackPanel>
+                    <StackPanel x:Name="ObservationRows" Spacing="8" />
+                    <StackPanel Orientation="Horizontal" Spacing="8">
+                        <Button Content="Добавить наблюдение" Click="AddObservation_Click" />
+                        <Button Content="Каталог специальностей" Click="EditCatalog_Click" />
+                    </StackPanel>
+                </StackPanel>
             </StackPanel>
         </ScrollViewer>
 

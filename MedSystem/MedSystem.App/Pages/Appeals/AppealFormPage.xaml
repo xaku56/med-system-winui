@@ -64,9 +64,35 @@
                              Header="Группа / принадлежность" MaxLength="64" />
                 </Grid>
 
-                <TextBox x:Name="ComplaintsBox" Header="Жалобы"
-                         AcceptsReturn="True" TextWrapping="Wrap" Height="90"
-                         MaxLength="2000" />
+                <StackPanel Spacing="6">
+                    <TextBox x:Name="ComplaintsBox" Header="Жалобы"
+                             AcceptsReturn="True" TextWrapping="Wrap" Height="90"
+                             MaxLength="2000" />
+                    <Grid ColumnSpacing="8">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+                        <ComboBox x:Name="TemplateBox" HorizontalAlignment="Stretch"
+                                  PlaceholderText="Шаблон жалоб" AutomationProperties.Name="Шаблон жалоб"
+                                  SelectionChanged="TemplateBox_SelectionChanged" />
+                        <Button x:Name="InsertTemplateButton" Grid.Column="1" Content="Вставить"
+                                IsEnabled="False" Click="InsertTemplate_Click" />
+                        <Button Grid.Column="2" Content="Шаблоны…">
+                            <Button.Flyout>
+                                <MenuFlyout>
+                                    <MenuFlyoutItem Text="Новый шаблон…" Click="AddTemplate_Click" />
+                                    <MenuFlyoutItem x:Name="EditTemplateItem" Text="Изменить выбранный…"
+                                                    IsEnabled="False" Click="EditTemplate_Click" />
+                                    <MenuFlyoutItem x:Name="DeleteTemplateItem" Text="Удалить выбранный…"
+                                                    IsEnabled="False" Click="DeleteTemplate_Click" />
+                                </MenuFlyout>
+                            </Button.Flyout>
+                        </Button>
+                    </Grid>
+                    <InfoBar x:Name="TemplateErrorBar" Title="Шаблоны жалоб" Severity="Error" />
+                </StackPanel>
 
                 <TextBlock Text="Объективные данные" Style="{StaticResource SubtitleTextBlockStyle}"
                            Margin="0,8,0,0" />
@@ -111,6 +137,10 @@
                 </Grid>
 
                 <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
                     <AutoSuggestBox x:Name="DiagnosisBox"
                                     Header="Диагноз (МКБ)"
                                     PlaceholderText="Начните вводить код или название..."
@@ -119,6 +149,8 @@
                                   Margin="0,22,12,0" HorizontalAlignment="Right"
                                   VerticalAlignment="Center" IsHitTestVisible="False"
                                   IsActive="False" Visibility="Collapsed" />
+                    <Button Grid.Column="1" Content="Выбрать из МКБ" Margin="8,0,0,0"
+                            VerticalAlignment="Bottom" Click="ChooseDiagnosis_Click" />
                 </Grid>
 
                 <TextBox x:Name="ActionsBox" Header="Действия и рекомендации"

@@ -20,6 +20,8 @@
             <TextBlock Text="Справочник МКБ" Style="{StaticResource TitleTextBlockStyle}" />
             <StackPanel Orientation="Horizontal" Spacing="12" HorizontalAlignment="Right">
                 <TextBlock x:Name="CountText" Text="" VerticalAlignment="Center" Opacity="0.6" />
+                <Button x:Name="ImportButton" Content="Импорт CSV" Click="ImportButton_Click"
+                        ToolTipService.ToolTip="Файл UTF-8 с двумя колонками: код и наименование" />
                 <Button Content="+ Добавить" Style="{StaticResource AccentButtonStyle}"
                         Click="AddButton_Click" />
             </StackPanel>

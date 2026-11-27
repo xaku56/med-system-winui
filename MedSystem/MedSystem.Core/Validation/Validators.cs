@@ -52,7 +52,8 @@ public static class Validators
 
     /// <summary>Время "чч:мм" в 24-часовом формате.</summary>
     public static bool IsValidTime(string value) =>
-        TimeOnly.TryParseExact(value, TimeFormat, System.Globalization.CultureInfo.InvariantCulture,
+        // .NET 11 принимает конец суток 24:00; журнал хранит время внутри выбранного дня.
+        string.CompareOrdinal(value, "24:00") < 0 && TimeOnly.TryParseExact(value, TimeFormat, System.Globalization.CultureInfo.InvariantCulture,
             System.Globalization.DateTimeStyles.None, out _);
 
     public static List<string> ValidateEmployee(Employee e)
@@ -92,11 +93,16 @@ public static class Validators
         CheckDate(errors, s.BirthDate, "Дата рождения", required: false);
 
         CheckDigits(errors, s.Oms, "ОМС", 16);
-        CheckText(errors, s.Address, "Адрес проживания", maxLength: 255, required: false);
         CheckDate(errors, s.MedicalExamDate, "Дата медосмотра", required: false);
         CheckDate(errors, s.FluorographyDate, "Дата флюорографии", required: false);
         CheckText(errors, s.HealthGroup, "Группа здоровья", maxLength: 100, required: false);
         CheckText(errors, s.DispensaryDetails, "У кого состоит на учёте", maxLength: 255, required: false);
+        foreach (var observation in s.Observations)
+        {
+            CheckText(errors, observation.Specialty, "Специальность врача", maxLength: 255);
+            CheckText(errors, observation.IcdCode, "Код МКБ");
+            CheckText(errors, observation.Diagnosis, "Диагноз по МКБ");
+        }
 
         return errors;
     }
@@ -124,7 +130,7 @@ public static class Validators
         CheckDate(errors, a.BirthDate, "Дата рождения", required: false);
         CheckText(errors, a.ParentPhone, "Телефон родителя", maxLength: 20, required: false);
         CheckText(errors, a.GroupName, "Группа / принадлежность", maxLength: 64, required: false);
-        CheckText(errors, a.Complaints, "Жалобы", maxLength: 2000);
+        CheckText(errors, a.Complaints, "Жалобы", maxLength: ComplaintTemplates.MaxLength);
         CheckRange(errors, a.HeightCm, "Рост, см", 50, 250);
         CheckRange(errors, a.WeightKg, "Вес, кг", 10, 300);
         CheckRange(errors, a.Temperature, "Температура, °C", 34, 43);
@@ -136,7 +142,8 @@ public static class Validators
             errors.Add("Верхнее давление должно быть больше нижнего.");
         CheckRange(errors, a.Pulse, "Пульс, уд/мин", 30, 220);
         CheckRange(errors, a.Saturation, "Сатурация, %", 50, 100);
-        CheckText(errors, a.Diagnosis, "Диагноз", maxLength: 255, required: false);
+        // В обращении сохраняется «код - наименование» из справочника МКБ.
+        CheckText(errors, a.Diagnosis, "Диагноз", maxLength: 10 + 3 + 255, required: false);
         CheckText(errors, a.ActionsRecommendations, "Действия и рекомендации", maxLength: 2000, required: false);
         return errors;
     }

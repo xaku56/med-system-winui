@@ -422,7 +422,7 @@ try
     DatabaseInitializer.Initialize();
     DatabaseInitializer.Initialize();
     SqliteConnection.ClearAllPools();
-    var upgradeBackups = Directory.GetFiles(BackupService.BackupDirectory, "med_system_before_upgrade_v0_to_v2_*.db");
+    var upgradeBackups = Directory.GetFiles(BackupService.BackupDirectory, $"med_system_before_upgrade_v0_to_v{DatabaseInitializer.CurrentSchemaVersion}_*.db");
     Check(upgradeBackups.Length == 1, "one backup is created before upgrading an existing database");
     using (var backupConnection = new SqliteConnection($"Data Source={upgradeBackups[0]};Mode=ReadOnly;Pooling=False"))
     using (var command = backupConnection.CreateCommand())
@@ -471,6 +471,35 @@ try
     BackupService.ValidateBackup(backup);
     Check(File.Exists(backup), "backup validates");
     ExpectFailure<InvalidOperationException>(() => BackupService.CreateManualBackup(Db.DbPath), "backup cannot overwrite live database");
+    Db.DbPath = Path.Combine(directory, "features.db");
+    DatabaseInitializer.Initialize();
+    var beforeBoundary = new DateTime(2026, 8, 14);
+    Check(GroupRepository.Insert("31 ИС") && GroupRepository.Insert("41 ИС")
+        && GroupRepository.Insert("Курсы"), "graduation fixture");
+    var graduate = GroupRepository.GetAll().Single(g => g.Name == "41 ИС");
+    StudentRepository.Insert(new Student { GroupId = graduate.Id, LastName = "Выпускник", FirstName = "Иван" });
+    Check(GroupRepository.AdvanceAcademicYear(beforeBoundary) == 0, "day before rollover");
+    Check(GroupRepository.AdvanceAcademicYear(beforeBoundary.AddDays(1)) == 2, "promote and graduate on August 15");
+    Check(GroupRepository.GetAll().Any(g => g.Name == "41 ИС" && g.Id != graduate.Id)
+        && GroupRepository.GetAll(archived: true).Single().Id == graduate.Id
+        && StudentRepository.GetPage(new() { Archived = true }).Items.Single().GroupId == graduate.Id,
+        "reuse graduate name, keep archive identity and student");
+    Check(GroupRepository.AdvanceAcademicYear(beforeBoundary.AddDays(2), manual: true) == 0,
+        "manual annual action cannot repeat automatic graduation");
+    Check(GroupRepository.AdvanceAcademicYear(new DateTime(2028, 1, 10)) == 1
+        && GroupRepository.GetAll(archived: true).Count == 2, "catch up missed rollover in January");
+
+    var icd = IcdImport.Read(new StringReader("Код;Наименование\nJ06.9;Старая запись\nz99.1;\"Пример; с разделителем\"\nZ99.1;\"Пример; с разделителем\""));
+    Check(icd.Count == 2 && IcdRepository.Import(icd) == 1 && IcdRepository.Import(icd) == 0
+        && IcdRepository.Search("J06.9").Single().Name != "Старая запись", "CSV import preserves edited codes and is idempotent");
+    ExpectFailure<InvalidDataException>(() => IcdImport.Read(new StringReader("A00,x\na00,y")), "conflicting names in CSV");
+    ExpectFailure<InvalidDataException>(() => IcdImport.Read(new StringReader("A00\n")), "reject missing ICD name");
+
+    checks += AppealFeatureChecks.Run();
+    StudentImportChecks.Run();
+    checks++;
+    MedicalChecks.Run();
+    checks++;
     Console.WriteLine($"Passed {checks} regression checks.");
 }
 finally

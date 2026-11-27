@@ -1,3 +1,4 @@
+using Microsoft.Data.Sqlite;
 using MedSystem.Core;
 using MedSystem.Core.Models;
 
@@ -34,6 +35,7 @@ public static class StudentRepository
         };
 
         using var conn = Db.Open();
+        using var read = conn.BeginTransaction(deferred: true);
         using var cmd = conn.CreateCommand();
 
         var search = request.SearchText.Trim();
@@ -85,10 +87,14 @@ public static class StudentRepository
             LIMIT $limit OFFSET $offset
             """;
 
-        using var reader = cmd.ExecuteReader();
         var items = new List<Student>(pageSize);
-        while (reader.Read())
-            items.Add(ReadStudent(reader));
+        using (var reader = cmd.ExecuteReader())
+        {
+            while (reader.Read())
+                items.Add(ReadStudent(reader));
+        }
+        LoadObservations(conn, items);
+        read.Commit();
 
         return new PageResult<Student>
         {
@@ -101,6 +107,7 @@ public static class StudentRepository
     public static Student? GetById(long id)
     {
         using var conn = Db.Open();
+        using var read = conn.BeginTransaction(deferred: true);
         using var cmd = conn.CreateCommand();
         cmd.CommandText = $"""
             SELECT {SelectColumns}
@@ -109,10 +116,15 @@ public static class StudentRepository
             WHERE s.id = $id AND s.deleted_at IS NULL
             """;
         cmd.Parameters.AddWithValue("$id", id);
-        using var reader = cmd.ExecuteReader();
-        if (!reader.Read())
-            return null;
-        return ReadStudent(reader);
+        Student student;
+        using (var reader = cmd.ExecuteReader())
+        {
+            if (!reader.Read()) return null;
+            student = ReadStudent(reader);
+        }
+        LoadObservations(conn, [student]);
+        read.Commit();
+        return student;
     }
 
     public static List<string> FindDuplicates(Student student)
@@ -171,6 +183,14 @@ public static class StudentRepository
     public static void Insert(Student s)
     {
         using var conn = Db.Open();
+        using var tx = conn.BeginTransaction();
+        Insert(conn, s);
+        tx.Commit();
+    }
+
+    // Групповой импорт использует общую транзакцию для всего файла.
+    internal static void Insert(SqliteConnection conn, Student s)
+    {
         using var cmd = conn.CreateCommand();
         cmd.CommandText = """
             INSERT INTO students (
@@ -185,11 +205,17 @@ public static class StudentRepository
             """;
         AddParameters(cmd, s);
         cmd.ExecuteNonQuery();
+        if (s.IsOnDispensaryRegister && s.Observations.Count > 0)
+        {
+            cmd.CommandText = "SELECT last_insert_rowid()";
+            InsertObservations(conn, Convert.ToInt64(cmd.ExecuteScalar()), s.Observations);
+        }
     }
 
     public static void Update(Student s)
     {
         using var conn = Db.Open();
+        using var tx = conn.BeginTransaction();
         using var cmd = conn.CreateCommand();
         cmd.CommandText = """
             UPDATE students SET
@@ -204,7 +230,61 @@ public static class StudentRepository
             """;
         AddParameters(cmd, s);
         cmd.Parameters.AddWithValue("$id", s.Id);
+        if (cmd.ExecuteNonQuery() != 1)
+            throw new InvalidOperationException("Студент больше не доступен для редактирования.");
+
+        cmd.CommandText = "DELETE FROM student_observations WHERE student_id = $id";
         cmd.ExecuteNonQuery();
+        if (s.IsOnDispensaryRegister)
+            InsertObservations(conn, s.Id, s.Observations);
+        tx.Commit();
+    }
+
+    private static void InsertObservations(SqliteConnection conn, long studentId, List<DispensaryObservation> observations)
+    {
+        using var cmd = conn.CreateCommand();
+        cmd.CommandText = """
+            INSERT INTO student_observations (student_id, specialty, icd_code, diagnosis)
+            VALUES ($id, $specialty, $code, $diagnosis)
+            """;
+        cmd.Parameters.AddWithValue("$id", studentId);
+        var specialty = cmd.Parameters.Add("$specialty", SqliteType.Text);
+        var code = cmd.Parameters.Add("$code", SqliteType.Text);
+        var diagnosis = cmd.Parameters.Add("$diagnosis", SqliteType.Text);
+        foreach (var item in observations)
+        {
+            specialty.Value = item.Specialty;
+            code.Value = item.IcdCode;
+            diagnosis.Value = item.Diagnosis;
+            cmd.ExecuteNonQuery();
+        }
+    }
+
+    private static void LoadObservations(SqliteConnection conn, List<Student> students)
+    {
+        var registered = students.Where(s => s.IsOnDispensaryRegister).ToDictionary(s => s.Id);
+        if (registered.Count == 0) return;
+
+        using var cmd = conn.CreateCommand();
+        var ids = new List<string>(registered.Count);
+        foreach (var id in registered.Keys)
+        {
+            var parameter = $"$id{ids.Count}";
+            ids.Add(parameter);
+            cmd.Parameters.AddWithValue(parameter, id);
+        }
+        cmd.CommandText = $"""
+            SELECT student_id, specialty, icd_code, diagnosis FROM student_observations
+            WHERE student_id IN ({string.Join(", ", ids)}) ORDER BY student_id, id
+            """;
+        using var reader = cmd.ExecuteReader();
+        while (reader.Read())
+            registered[reader.GetInt64(0)].Observations.Add(new DispensaryObservation
+            {
+                Specialty = reader.GetString(1),
+                IcdCode = reader.GetString(2),
+                Diagnosis = reader.GetString(3),
+            });
     }
 
     public static void MoveToTrash(long id) => TrashRepository.MoveToTrash("student", id);

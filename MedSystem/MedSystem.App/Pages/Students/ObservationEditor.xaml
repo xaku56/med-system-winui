@@ -1,0 +1,29 @@
+<UserControl
+    x:Class="MedSystem.App.Pages.ObservationEditor"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    <Border Padding="12" BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+            BorderThickness="1" CornerRadius="8">
+        <StackPanel Spacing="8">
+            <Grid ColumnSpacing="8">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
+                <AutoSuggestBox x:Name="SpecialtyBox" Header="Специальность врача"
+                                TextChanged="SpecialtyBox_TextChanged"
+                                SuggestionChosen="SpecialtyBox_SuggestionChosen" />
+                <Button Grid.Column="1" VerticalAlignment="Bottom" Click="OpenList_Click"
+                        AutomationProperties.Name="Все специальности" ToolTipService.ToolTip="Все специальности">
+                    <FontIcon Glyph="&#xE70D;" FontSize="14" />
+                </Button>
+            </Grid>
+            <TextBlock Text="Диагноз по МКБ" />
+            <TextBlock x:Name="DiagnosisText" TextWrapping="Wrap" IsTextSelectionEnabled="True" />
+            <StackPanel Orientation="Horizontal" Spacing="8">
+                <Button Content="Выбрать диагноз" Click="PickDiagnosis_Click" />
+                <Button Content="Убрать наблюдение" Click="Remove_Click" />
+            </StackPanel>
+        </StackPanel>
+    </Border>
+</UserControl>

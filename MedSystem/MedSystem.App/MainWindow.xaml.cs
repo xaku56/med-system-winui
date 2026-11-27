@@ -73,7 +73,7 @@ namespace MedSystem.App
                 {
                     StartupInfoBar.Title = "Новый учебный год";
                     StartupInfoBar.Message =
-                        $"Начался новый учебный год! Групп переведено на следующий курс: {count}.";
+                        $"Начался новый учебный год! Выполнено переводов и выпусков групп: {count}.";
                     StartupInfoBar.Severity = InfoBarSeverity.Informational;
                     StartupInfoBar.IsOpen = true;
                 }
@@ -106,6 +106,7 @@ namespace MedSystem.App
                 "students" => typeof(StudentsPage),
                 "medicines" => typeof(MedicinesPage),
                 "appeals" => typeof(AppealsPage),
+                "journal" => typeof(JournalPage),
                 "trash" => typeof(TrashPage),
                 _ => null,
             };
