@@ -34,18 +34,17 @@
                 <ColumnDefinition Width="*" />
                 <ColumnDefinition Width="Auto" />
             </Grid.ColumnDefinitions>
-            <!-- Кнопки высотой 32 центрируются по первой строке заголовка (высота 36). -->
-            <Button Grid.Column="0" VerticalAlignment="Top" Margin="0,2,0,0" Click="BackButton_Click"
+            <Button Grid.Column="0" VerticalAlignment="Center" MinHeight="32" Click="BackButton_Click"
                     ToolTipService.ToolTip="Назад" Padding="8,6">
                 <FontIcon Glyph="&#xE72B;" FontSize="14" />
             </Button>
-            <StackPanel Grid.Column="1" VerticalAlignment="Top">
+            <StackPanel Grid.Column="1" VerticalAlignment="Center">
                 <TextBlock x:Name="TitleText" Text="Карточка студента"
                            Style="{StaticResource TitleTextBlockStyle}" TextWrapping="Wrap" />
                 <TextBlock x:Name="SubtitleText" Opacity="0.7" TextWrapping="Wrap" />
             </StackPanel>
             <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="12"
-                        VerticalAlignment="Top" Margin="0,2,0,0">
+                        VerticalAlignment="Center">
                 <Button x:Name="EditButton" Content="Редактировать" Click="EditButton_Click" IsEnabled="False" />
                 <Button x:Name="NewAppealButton" Content="+ Новое обращение"
                         Style="{StaticResource AccentButtonStyle}"
